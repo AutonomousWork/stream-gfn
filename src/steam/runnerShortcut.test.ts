@@ -8,10 +8,10 @@ import type {
   SteamLifetimeEvent,
   SteamShortcut,
 } from "./privateSteam";
+import { pathMatches } from "./privateSteam";
 import {
   RUNNER_NAME,
   cleanupRunner,
-  pathMatches,
   prepareRunner,
   RunnerService,
 } from "./runnerShortcut";
@@ -379,6 +379,64 @@ describe("verified cleanup", () => {
 });
 
 describe("runtime service", () => {
+  it("reconciles the exact hidden fingerprint before every launch", async () => {
+    const backend = new FakeBackend();
+    const steam = new FakeSteam();
+    backend.savedId = "42";
+    steam.shortcuts = [exactRunner()];
+    const service = new RunnerService(backend, steam, 10);
+
+    await service.prepare();
+    steam.shortcuts[0]!.executablePath = "/foreign/runner";
+    const result = await service.launch();
+
+    expect(result).toMatchObject({ ok: false, code: "ambiguous_runner" });
+    expect(steam.calls.some((call) => call.startsWith("run:"))).toBe(false);
+  });
+
+  it("does not attach or launch when disposed during preflight", async () => {
+    let resolvePreflight: (() => void) | undefined;
+    const backend = new FakeBackend();
+    backend.getGfnPreflight = vi.fn(
+      () =>
+        new Promise<{ ready: true; code: string; message: string }>((resolve) => {
+          resolvePreflight = () => resolve({ ready: true as const, code: "ready", message: "ready" });
+        }),
+    );
+    const steam = new FakeSteam();
+    backend.savedId = "42";
+    steam.shortcuts = [exactRunner()];
+    const service = new RunnerService(backend, steam, 10);
+
+    const launch = service.launch();
+    service.dispose();
+    resolvePreflight?.();
+
+    await expect(launch).resolves.toMatchObject({ ok: false, code: "service_disposed" });
+    expect(steam.calls).toEqual([]);
+  });
+
+  it("does not reattach state when disposed during preparation", async () => {
+    let resolveInventory: ((value: SteamShortcut[]) => void) | undefined;
+    const backend = new FakeBackend();
+    const steam = new FakeSteam();
+    steam.listShortcuts = vi.fn(
+      () =>
+        new Promise<SteamShortcut[]>((resolve) => {
+          resolveInventory = resolve;
+        }),
+    );
+    const service = new RunnerService(backend, steam, 10);
+
+    const prepare = service.prepare();
+    service.dispose();
+    resolveInventory?.([]);
+
+    await expect(prepare).resolves.toMatchObject({ ok: false, code: "service_disposed" });
+    expect(steam.lifetimeListeners.size).toBe(0);
+    expect(steam.calls.some((call) => call.startsWith("add:"))).toBe(false);
+  });
+
   it("keeps an accepted notification timeout unknown and not retry-ready", async () => {
     vi.useFakeTimers();
     const backend = new FakeBackend();

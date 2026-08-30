@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createPrivateSteamAdapter } from "./privateSteam";
 
 const makeSurface = () => {
+  let lifetimeListener:
+    | ((event: { unAppID?: unknown; bRunning?: unknown }) => void)
+    | null = null;
   const details = {
     unAppID: 42,
     strDisplayName: "Stream GFN Runner",
@@ -10,7 +13,7 @@ const makeSurface = () => {
     strShortcutStartDir: "/plugin",
     strLaunchOptions: "",
     strShortcutLaunchOptions: "",
-    eDisplayStatus: 10,
+    eDisplayStatus: 11,
   };
   const overview = {
     appid: 42,
@@ -33,11 +36,16 @@ const makeSurface = () => {
     RunGame: vi.fn(),
   };
   return {
+    details,
+    overview,
     source: {
       SteamClient: {
         Apps: apps,
         GameSessions: {
-          RegisterForAppLifetimeNotifications: vi.fn(() => ({ unregister: vi.fn() })),
+          RegisterForAppLifetimeNotifications: vi.fn((listener) => {
+            lifetimeListener = listener;
+            return { unregister: vi.fn() };
+          }),
         },
       },
       appStore: { m_mapApps: new Map([[42, overview]]) },
@@ -48,6 +56,9 @@ const makeSurface = () => {
       },
     },
     apps,
+    emitLifetime: (event: { unAppID?: unknown; bRunning?: unknown }) => {
+      lifetimeListener?.(event);
+    },
   };
 };
 
@@ -86,5 +97,46 @@ describe("private Steam adapter", () => {
     result.port?.runGame("not-a-number-but-opaque", "1903340");
 
     expect(apps.RunGame).toHaveBeenCalledWith("not-a-number-but-opaque", "1903340", -1, 100);
+  });
+
+  it("maps Decky's pinned display-status values and rejects the neighboring enum", async () => {
+    const { source, details } = makeSurface();
+    const result = createPrivateSteamAdapter(source, { detailsTimeoutMs: 5 });
+
+    await expect(result.port?.readActivity("42")).resolves.toBe("ReadyToLaunch");
+    details.eDisplayStatus = 10;
+    await expect(result.port?.readActivity("42")).resolves.toBe("Other");
+  });
+
+  it("treats unAppID zero lifetime notifications as untrusted wakeups", () => {
+    const { source, emitLifetime } = makeSurface();
+    const result = createPrivateSteamAdapter(source);
+    const listener = vi.fn();
+
+    result.port?.subscribeLifetime(listener);
+    emitLifetime({ unAppID: 0, bRunning: true });
+
+    expect(listener).toHaveBeenCalledWith({ running: true });
+  });
+
+  it("fails closed for mismatched record IDs and non-boolean hidden state", async () => {
+    const detailsMismatch = makeSurface();
+    detailsMismatch.details.unAppID = 99;
+    const detailsPort = createPrivateSteamAdapter(detailsMismatch.source, { detailsTimeoutMs: 5 });
+    await expect(detailsPort.port?.getShortcut("42")).resolves.toBeNull();
+
+    const overviewMismatch = makeSurface();
+    overviewMismatch.overview.appid = 99;
+    const overviewPort = createPrivateSteamAdapter(overviewMismatch.source);
+    await expect(overviewPort.port?.getShortcut("42")).resolves.toBeNull();
+
+    const hiddenMismatch = makeSurface();
+    Object.defineProperty(hiddenMismatch.source.collectionStore, "BIsHidden", {
+      value: vi.fn(() => "hidden"),
+    });
+    const hiddenPort = createPrivateSteamAdapter(hiddenMismatch.source);
+    await expect(hiddenPort.port?.getShortcut("42")).rejects.toThrow(
+      "hidden state is unreadable",
+    );
   });
 });

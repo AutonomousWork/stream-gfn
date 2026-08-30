@@ -3,7 +3,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional, TypedDict, cast
+from typing import Any, Dict, Literal, Optional, TypedDict, cast
 
 
 BUILD_IDENTITY_SCHEMA_VERSION = 1
@@ -15,7 +15,7 @@ _COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
 
 class BuildIdentity(TypedDict):
     schemaVersion: int
-    source: str
+    source: Literal["development", "packaged"]
     metadataValidated: bool
     tag: Optional[str]
     commit: Optional[str]

@@ -34,6 +34,12 @@ FIXED_RUNTIME_FILES = (
     "package.json",
     "plugin.json",
 )
+FIXED_BACKEND_FILES = (
+    "backend/__init__.py",
+    "backend/identity.py",
+    "backend/launcher.py",
+    "backend/settings.py",
+)
 
 
 class ReleaseBuildError(RuntimeError):
@@ -79,10 +85,9 @@ def build_release(
     if COMMIT_PATTERN.fullmatch(commit) is None:
         raise ReleaseBuildError("release commit must be a full lowercase 40-character SHA")
 
-    if publication:
-        _verify_publication_checkout(root, tag, commit)
-
     runtime = _runtime_sources(root)
+    if publication:
+        _verify_publication_checkout(root, tag, commit, runtime)
     build_info = (
         json.dumps(
             {
@@ -143,14 +148,19 @@ def build_release(
 
 
 def _runtime_sources(root: Path) -> Sequence[Tuple[str, Path]]:
-    relative_paths = list(FIXED_RUNTIME_FILES)
+    relative_paths = [*FIXED_RUNTIME_FILES, *FIXED_BACKEND_FILES]
     backend = root / "backend"
     _require_directory(root, backend)
-    relative_paths.extend(
-        path.relative_to(root).as_posix() for path in sorted(backend.glob("*.py"))
+    allowed_backend = set(FIXED_BACKEND_FILES)
+    unexpected_backend = sorted(
+        path.relative_to(root).as_posix()
+        for path in backend.glob("*.py")
+        if path.relative_to(root).as_posix() not in allowed_backend
     )
-    if not any(relative.startswith("backend/") for relative in relative_paths):
-        raise ReleaseBuildError("release requires backend Python modules")
+    if unexpected_backend:
+        raise ReleaseBuildError(
+            "unexpected backend runtime module(s): " + ", ".join(unexpected_backend)
+        )
 
     sources = []
     for relative in sorted(relative_paths):
@@ -218,7 +228,12 @@ def _read_package_version(package_path: Path) -> str:
     return version
 
 
-def _verify_publication_checkout(root: Path, tag: str, commit: str) -> None:
+def _verify_publication_checkout(
+    root: Path,
+    tag: str,
+    commit: str,
+    runtime: Sequence[Tuple[str, Path]],
+) -> None:
     top = _git(root, "rev-parse", "--show-toplevel")
     if Path(top).resolve() != root:
         raise ReleaseBuildError("publication root must be the Git checkout root")
@@ -238,6 +253,16 @@ def _verify_publication_checkout(root: Path, tag: str, commit: str) -> None:
     )
     if tracked_dirty != 0 or staged_dirty != 0:
         raise ReleaseBuildError("publication checkout has tracked or staged changes")
+
+    tracked_at_commit = set(_git(root, "ls-tree", "-r", "--name-only", commit).splitlines())
+    untracked_runtime = sorted(
+        relative for relative, _source in runtime if relative not in tracked_at_commit
+    )
+    if untracked_runtime:
+        raise ReleaseBuildError(
+            "publication runtime file(s) are not tracked at the tagged commit: "
+            + ", ".join(untracked_runtime)
+        )
 
 
 def _git(root: Path, *args: str) -> str:

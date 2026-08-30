@@ -1,7 +1,6 @@
 import type {
   PrivateSteamPort,
   SteamActivitySnapshot,
-  SteamLifetimeEvent,
 } from "./privateSteam";
 
 export type RunnerActivity = "inactive" | "active" | "unknown";
@@ -16,7 +15,12 @@ export type RunnerLaunchResult =
   | {
       accepted: false;
       activity: RunnerActivity;
-      reason: "runner_active" | "runner_unknown" | "launch_unconfirmed" | "launch_error";
+      reason:
+        | "runner_active"
+        | "runner_unknown"
+        | "launch_unconfirmed"
+        | "launch_error"
+        | "launch_cancelled";
     };
 
 type StateSteamPort = Pick<
@@ -38,6 +42,8 @@ export class RunnerStateTracker {
   private unsubscribeLifetime: (() => void) | null = null;
   private readonly listeners = new Set<(activity: RunnerActivity) => void>();
   private launchUnconfirmed = false;
+  private lifecycleGeneration = 0;
+  private cancelPendingLaunch: (() => void) | null = null;
 
   constructor(private readonly steam: StateSteamPort) {}
 
@@ -55,12 +61,14 @@ export class RunnerStateTracker {
 
   async attach(runnerShortcutId: string): Promise<RunnerActivity> {
     this.detachLifetime();
+    this.lifecycleGeneration += 1;
+    const generation = this.lifecycleGeneration;
     this.runnerShortcutId = runnerShortcutId;
     this.launchUnconfirmed = false;
-    this.unsubscribeLifetime = this.steam.subscribeLifetime((event) => {
-      this.handleLifetime(event);
+    this.unsubscribeLifetime = this.steam.subscribeLifetime(() => {
+      void this.refreshForGeneration(runnerShortcutId, generation);
     });
-    return this.refresh(runnerShortcutId);
+    return this.refreshForGeneration(runnerShortcutId, generation);
   }
 
   async refresh(runnerShortcutId = this.runnerShortcutId): Promise<RunnerActivity> {
@@ -68,12 +76,7 @@ export class RunnerStateTracker {
       this.setActivity("unknown");
       return this.currentActivity;
     }
-    try {
-      this.setActivity(mapSteamActivity(await this.steam.readActivity(runnerShortcutId)));
-    } catch (_error) {
-      this.setActivity("unknown");
-    }
-    return this.currentActivity;
+    return this.refreshForGeneration(runnerShortcutId, this.lifecycleGeneration);
   }
 
   async launch(
@@ -81,20 +84,26 @@ export class RunnerStateTracker {
     targetSteamAppId: string,
     notificationTimeoutMs: number,
   ): Promise<RunnerLaunchResult> {
+    const generation = this.lifecycleGeneration;
     if (this.launchUnconfirmed) {
       this.setActivity("unknown");
       return { accepted: false, activity: "unknown", reason: "launch_unconfirmed" };
     }
 
-    let settleNotification: ((event: SteamLifetimeEvent | null) => void) | null = null;
-    const notification = new Promise<SteamLifetimeEvent | null>((resolve) => {
-      settleNotification = resolve;
+    let settleNotification: ((activity: RunnerActivity | null) => void) | null = null;
+    let notificationSettled = false;
+    const notification = new Promise<RunnerActivity | null>((resolve) => {
+      settleNotification = (activity) => {
+        if (notificationSettled) return;
+        notificationSettled = true;
+        resolve(activity);
+      };
     });
-    const unsubscribe = this.steam.subscribeLifetime((event) => {
-      if (event.runnerShortcutId === identity.runnerShortcutId) {
-        settleNotification?.(event);
-      }
+    const unsubscribe = this.steam.subscribeLifetime(() => {
+      void this.confirmActive(identity.runnerShortcutId, generation, settleNotification);
     });
+    const cancelLaunch = (): void => settleNotification?.(null);
+    this.cancelPendingLaunch = cancelLaunch;
 
     let snapshot: RunnerActivity;
     try {
@@ -102,9 +111,15 @@ export class RunnerStateTracker {
     } catch (_error) {
       snapshot = "unknown";
     }
+    if (generation !== this.lifecycleGeneration) {
+      unsubscribe();
+      if (this.cancelPendingLaunch === cancelLaunch) this.cancelPendingLaunch = null;
+      return { accepted: false, activity: "unknown", reason: "launch_cancelled" };
+    }
     this.setActivity(snapshot);
     if (snapshot !== "inactive") {
       unsubscribe();
+      if (this.cancelPendingLaunch === cancelLaunch) this.cancelPendingLaunch = null;
       return {
         accepted: false,
         activity: snapshot,
@@ -116,16 +131,29 @@ export class RunnerStateTracker {
       this.steam.runGame(identity.runnerGameId64, targetSteamAppId);
     } catch (_error) {
       unsubscribe();
+      if (this.cancelPendingLaunch === cancelLaunch) this.cancelPendingLaunch = null;
       this.setActivity("unknown");
       return { accepted: false, activity: "unknown", reason: "launch_error" };
     }
 
+    void this.confirmActive(identity.runnerShortcutId, generation, settleNotification);
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeout = new Promise<null>((resolve) => {
-      setTimeout(() => resolve(null), notificationTimeoutMs);
+      timeoutId = setTimeout(() => resolve(null), notificationTimeoutMs);
     });
-    const event = await Promise.race([notification, timeout]);
-    unsubscribe();
-    if (event?.running === true) {
+    let confirmedActivity: RunnerActivity | null;
+    try {
+      confirmedActivity = await Promise.race([notification, timeout]);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      unsubscribe();
+      if (this.cancelPendingLaunch === cancelLaunch) this.cancelPendingLaunch = null;
+    }
+    if (generation !== this.lifecycleGeneration) {
+      return { accepted: false, activity: "unknown", reason: "launch_cancelled" };
+    }
+    if (confirmedActivity === "active") {
       this.launchUnconfirmed = false;
       this.setActivity("active");
       return { accepted: true, activity: "active" };
@@ -137,16 +165,50 @@ export class RunnerStateTracker {
   }
 
   detach(): void {
+    this.lifecycleGeneration += 1;
+    this.cancelPendingLaunch?.();
+    this.cancelPendingLaunch = null;
     this.detachLifetime();
     this.runnerShortcutId = null;
     this.launchUnconfirmed = false;
     this.setActivity("unknown");
   }
 
-  private handleLifetime(event: SteamLifetimeEvent): void {
-    if (event.runnerShortcutId !== this.runnerShortcutId) return;
-    this.launchUnconfirmed = false;
-    this.setActivity(event.running ? "active" : "inactive");
+  private async refreshForGeneration(
+    runnerShortcutId: string,
+    generation: number,
+  ): Promise<RunnerActivity> {
+    let activity: RunnerActivity;
+    try {
+      activity = mapSteamActivity(await this.steam.readActivity(runnerShortcutId));
+    } catch (_error) {
+      activity = "unknown";
+    }
+    if (
+      generation === this.lifecycleGeneration &&
+      runnerShortcutId === this.runnerShortcutId
+    ) {
+      this.launchUnconfirmed = false;
+      this.setActivity(activity);
+    }
+    return this.currentActivity;
+  }
+
+  private async confirmActive(
+    runnerShortcutId: string,
+    generation: number,
+    settle: ((activity: RunnerActivity | null) => void) | null,
+  ): Promise<void> {
+    if (generation !== this.lifecycleGeneration) return;
+    let activity: RunnerActivity;
+    try {
+      activity = mapSteamActivity(await this.steam.readActivity(runnerShortcutId));
+    } catch (_error) {
+      return;
+    }
+    if (generation === this.lifecycleGeneration && activity === "active") {
+      settle?.("active");
+    }
   }
 
   private setActivity(activity: RunnerActivity): void {

@@ -47,7 +47,6 @@ export interface LaunchPresentation {
 }
 
 export interface RunnerServicePort {
-  readonly capability: CapabilityDiagnostic;
   readonly activity: RunnerActivity;
   subscribeStatus(listener: (activity: RunnerActivity) => void): () => void;
   prepare(): Promise<PrepareRunnerResult>;
@@ -204,6 +203,14 @@ export class GfnLaunchController {
   }
 
   reportLibraryCompatibility(report: LibraryCompatibilityReport): void {
+    if (
+      (report.available && this.libraryDiagnostic === null) ||
+      (!report.available &&
+        this.libraryDiagnostic?.code === report.code &&
+        this.libraryDiagnostic.message === report.message)
+    ) {
+      return;
+    }
     this.libraryDiagnostic = report.available ? null : report;
     if (!report.available) {
       this.update({

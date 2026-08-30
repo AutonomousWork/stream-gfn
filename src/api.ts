@@ -18,7 +18,7 @@ export interface RunnerBackendState {
 
 export interface BuildIdentity {
   schemaVersion: 1;
-  source: string;
+  source: "development" | "packaged";
   metadataValidated: boolean;
   tag: string | null;
   commit: string | null;

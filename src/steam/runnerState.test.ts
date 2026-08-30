@@ -9,12 +9,13 @@ const runner = {
 };
 
 const makeSteam = (activity: Awaited<ReturnType<PrivateSteamPort["readActivity"]>>) => {
+  let currentActivity = activity;
   const listeners = new Set<(event: SteamLifetimeEvent) => void>();
   const calls: string[] = [];
   const steam = {
     readActivity: vi.fn(async () => {
       calls.push("read");
-      return activity;
+      return currentActivity;
     }),
     subscribeLifetime: vi.fn((listener: (event: SteamLifetimeEvent) => void) => {
       calls.push("subscribe");
@@ -25,7 +26,14 @@ const makeSteam = (activity: Awaited<ReturnType<PrivateSteamPort["readActivity"]
       calls.push(`run:${gameId}:${appId}`);
     }),
   };
-  return { steam: steam as Pick<PrivateSteamPort, "readActivity" | "subscribeLifetime" | "runGame">, listeners, calls };
+  return {
+    steam: steam as Pick<PrivateSteamPort, "readActivity" | "subscribeLifetime" | "runGame">,
+    listeners,
+    calls,
+    setActivity: (next: typeof currentActivity) => {
+      currentActivity = next;
+    },
+  };
 };
 
 describe("runner activity", () => {
@@ -40,18 +48,20 @@ describe("runner activity", () => {
     expect(mapSteamActivity(steamState)).toBe(expected);
   });
 
-  it("publishes snapshots and only matching runner lifetime events", async () => {
-    const { steam, listeners } = makeSteam("ReadyToLaunch");
+  it("uses lifetime events only to refresh the exact runner snapshot", async () => {
+    const { steam, listeners, setActivity } = makeSteam("ReadyToLaunch");
     const tracker = new RunnerStateTracker(steam);
     const statuses: string[] = [];
     const unsubscribe = tracker.subscribe((status) => statuses.push(status));
 
     await tracker.attach(runner.runnerShortcutId);
-    for (const listener of listeners) listener({ runnerShortcutId: "99", running: true });
-    for (const listener of listeners) listener({ runnerShortcutId: "42", running: true });
-    for (const listener of listeners) listener({ runnerShortcutId: "42", running: false });
+    setActivity("Running");
+    for (const listener of listeners) listener({ running: true });
+    await Promise.resolve();
+    setActivity("ReadyToLaunch");
+    for (const listener of listeners) listener({ running: false });
+    await Promise.resolve();
     unsubscribe();
-    for (const listener of listeners) listener({ runnerShortcutId: "42", running: true });
 
     expect(statuses).toEqual(["unknown", "inactive", "active", "inactive"]);
   });
@@ -70,10 +80,12 @@ describe("runner activity", () => {
   );
 
   it("subscribes before rereading and launches opaque game ID with target AppID separately", async () => {
-    const { steam, listeners, calls } = makeSteam("ReadyToLaunch");
+    vi.useFakeTimers();
+    const { steam, listeners, calls, setActivity } = makeSteam("ReadyToLaunch");
     steam.runGame = vi.fn((gameId: string, appId: string) => {
       calls.push(`run:${gameId}:${appId}`);
-      for (const listener of listeners) listener({ runnerShortcutId: "42", running: true });
+      setActivity("Running");
+      for (const listener of listeners) listener({ running: true });
     });
     const tracker = new RunnerStateTracker(steam);
 
@@ -82,6 +94,8 @@ describe("runner activity", () => {
     expect(result).toEqual({ accepted: true, activity: "active" });
     expect(calls.indexOf("subscribe")).toBeLessThan(calls.indexOf("read"));
     expect(steam.runGame).toHaveBeenCalledWith("76561199000000042", "1903340");
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
   });
 
   it("latches unknown after an accepted launch notification timeout", async () => {

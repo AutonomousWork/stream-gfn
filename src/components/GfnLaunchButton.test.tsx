@@ -23,7 +23,6 @@ const READY: CapabilityDiagnostic = {
 };
 
 class FakeRunnerService implements RunnerServicePort {
-  readonly capability = READY;
   activity: RunnerActivity = "inactive";
   prepareResult: PrepareRunnerResult = {
     ok: true,
@@ -59,7 +58,7 @@ const backend = (
   preflight: GfnPreflight = { ready: true, code: "ready", message: "GFN ready" },
   identity: BuildIdentity = {
     schemaVersion: 1,
-    source: "package",
+    source: "packaged",
     metadataValidated: true,
     tag: "v0.1.0-alpha.1",
     commit: "0123456789abcdef",

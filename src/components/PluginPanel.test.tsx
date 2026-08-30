@@ -66,7 +66,7 @@ const makeController = (service: PanelService, notify = vi.fn()) =>
       })),
       getBuildIdentity: vi.fn(async () => ({
         schemaVersion: 1 as const,
-        source: "package",
+        source: "packaged" as const,
         metadataValidated: true,
         tag: "v0.1.0-alpha.1",
         commit: "0123456789abcdef",
@@ -79,7 +79,7 @@ describe("plugin panel contracts", () => {
     expect(
       formatBuildIdentity({
         schemaVersion: 1,
-        source: "package",
+        source: "packaged" as const,
         metadataValidated: true,
         tag: "v0.1.0-alpha.1",
         commit: "0123456789abcdef",

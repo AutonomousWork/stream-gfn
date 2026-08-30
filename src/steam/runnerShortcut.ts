@@ -6,7 +6,7 @@ import type {
   RunnerFingerprint,
   SteamShortcut,
 } from "./privateSteam";
-import { createPrivateSteamAdapter } from "./privateSteam";
+import { createPrivateSteamAdapter, pathMatches } from "./privateSteam";
 import {
   type RunnerActivity,
   type RunnerLaunchResult,
@@ -51,10 +51,7 @@ const fingerprintFor = (paths: PluginPaths): RunnerFingerprint => ({
   shortcutLaunchOptions: "",
 });
 
-export const pathMatches = (expectedPath: string, actualPath: string): boolean =>
-  actualPath === expectedPath || actualPath === `"${expectedPath}"`;
-
-export const hasExactFingerprint = (
+const hasExactFingerprint = (
   shortcut: SteamShortcut,
   fingerprint: RunnerFingerprint,
 ): boolean =>
@@ -133,6 +130,7 @@ const rollbackCreatedRunner = async (
 export const prepareRunner = async (
   backend: BackendPort,
   steam: PrivateSteamPort,
+  canContinue: () => boolean = () => true,
 ): Promise<PrepareRunnerResult> => {
   if (!steam.diagnostic.available) {
     return failure("capability_unavailable", steam.diagnostic.message);
@@ -142,15 +140,21 @@ export const prepareRunner = async (
   let savedId: string | null;
   let inventory: SteamShortcut[];
   try {
-    paths = await backend.getPluginPaths();
-    savedId = (await backend.loadState()).runnerShortcutId;
-    inventory = await steam.listShortcuts();
+    const [resolvedPaths, state, resolvedInventory] = await Promise.all([
+      backend.getPluginPaths(),
+      backend.loadState(),
+      steam.listShortcuts(),
+    ]);
+    paths = resolvedPaths;
+    savedId = state.runnerShortcutId;
+    inventory = resolvedInventory;
   } catch (error) {
     return failure(
       "inventory_unreadable",
       error instanceof Error ? error.message : "Steam shortcut inventory is unreadable",
     );
   }
+  if (!canContinue()) return failure("operation_cancelled", "Runner preparation was cancelled");
 
   const fingerprint = fingerprintFor(paths);
   const resolved = requireUnambiguousOwned(inspectInventory(inventory, fingerprint));
@@ -165,6 +169,9 @@ export const prepareRunner = async (
         saved.hidden &&
         resolved.runner?.runnerShortcutId === saved.runnerShortcutId
       ) {
+        if (!canContinue()) {
+          return failure("operation_cancelled", "Runner preparation was cancelled");
+        }
         return { ok: true, runner: identityOf(saved), created: false, recovered: false };
       }
     } catch (error) {
@@ -177,6 +184,9 @@ export const prepareRunner = async (
 
   if (resolved.runner !== null) {
     try {
+      if (!canContinue()) {
+        return failure("operation_cancelled", "Runner preparation was cancelled");
+      }
       await backend.saveState(resolved.runner.runnerShortcutId);
     } catch (error) {
       return failure(
@@ -194,12 +204,15 @@ export const prepareRunner = async (
 
   let createdId: string | null = null;
   try {
+    if (!canContinue()) throw new Error("Runner preparation was cancelled");
     createdId = await steam.addShortcut(fingerprint);
+    if (!canContinue()) throw new Error("Runner preparation was cancelled");
     if (!(await steam.waitForOverview(createdId, true))) {
       throw new Error("Steam did not publish the new runner overview");
     }
 
     await steam.configureShortcut(createdId, fingerprint);
+    if (!canContinue()) throw new Error("Runner preparation was cancelled");
     const configured = await steam.waitForFingerprint(createdId, fingerprint);
     if (configured === null) throw new Error("Steam did not retain the exact runner fingerprint");
 
@@ -213,6 +226,7 @@ export const prepareRunner = async (
     }
 
     const finalInventory = inspectInventory(await steam.listShortcuts(), fingerprint);
+    if (!canContinue()) throw new Error("Runner preparation was cancelled");
     if (
       finalInventory.near.length > 0 ||
       finalInventory.exact.length !== 1 ||
@@ -250,8 +264,12 @@ export const cleanupRunner = async (
   let fingerprint: RunnerFingerprint;
   let inspection: InventoryInspection;
   try {
-    fingerprint = fingerprintFor(await backend.getPluginPaths());
-    inspection = inspectInventory(await steam.listShortcuts(), fingerprint);
+    const [paths, inventory] = await Promise.all([
+      backend.getPluginPaths(),
+      steam.listShortcuts(),
+    ]);
+    fingerprint = fingerprintFor(paths);
+    inspection = inspectInventory(inventory, fingerprint);
   } catch (error) {
     return {
       ok: false,
@@ -316,6 +334,8 @@ export type ServiceLaunchResult =
 export class RunnerService {
   private readonly state: RunnerStateTracker;
   private prepared: PreparedRunner | null = null;
+  private disposed = false;
+  private lifecycleGeneration = 0;
 
   constructor(
     private readonly backend: BackendPort,
@@ -323,10 +343,6 @@ export class RunnerService {
     private readonly notificationTimeoutMs = DEFAULT_LAUNCH_NOTIFICATION_TIMEOUT_MS,
   ) {
     this.state = new RunnerStateTracker(steam);
-  }
-
-  get capability(): CapabilityDiagnostic {
-    return this.steam.diagnostic;
   }
 
   get activity(): RunnerActivity {
@@ -338,7 +354,17 @@ export class RunnerService {
   }
 
   async prepare(): Promise<PrepareRunnerResult> {
-    const result = await prepareRunner(this.backend, this.steam);
+    if (this.disposed) return this.disposedPrepareFailure();
+    const generation = this.lifecycleGeneration;
+    const result = await prepareRunner(
+      this.backend,
+      this.steam,
+      () => this.isCurrent(generation),
+    );
+    if (!this.isCurrent(generation)) {
+      this.state.detach();
+      return this.disposedPrepareFailure();
+    }
     if (!result.ok) {
       this.prepared = null;
       this.state.detach();
@@ -349,11 +375,17 @@ export class RunnerService {
     } else {
       await this.state.attach(result.runner.runnerShortcutId);
     }
+    if (!this.isCurrent(generation)) {
+      this.state.detach();
+      return this.disposedPrepareFailure();
+    }
     this.prepared = result.runner;
     return result;
   }
 
   async launch(): Promise<ServiceLaunchResult> {
+    if (this.disposed) return this.disposedLaunchFailure();
+    const generation = this.lifecycleGeneration;
     let preflight;
     try {
       preflight = await this.backend.getGfnPreflight();
@@ -365,6 +397,7 @@ export class RunnerService {
         activity: "unknown",
       };
     }
+    if (!this.isCurrent(generation)) return this.disposedLaunchFailure();
     if (!preflight.ready) {
       return {
         ok: false,
@@ -374,11 +407,10 @@ export class RunnerService {
       };
     }
 
-    if (this.prepared === null) {
-      const prepared = await this.prepare();
-      if (!prepared.ok) {
-        return { ...prepared, activity: "unknown" };
-      }
+    const prepared = await this.prepare();
+    if (!this.isCurrent(generation)) return this.disposedLaunchFailure();
+    if (!prepared.ok) {
+      return { ...prepared, activity: "unknown" };
     }
     const runner = this.prepared;
     if (runner === null) {
@@ -394,6 +426,7 @@ export class RunnerService {
       EXPEDITION_33_APP_ID,
       this.notificationTimeoutMs,
     );
+    if (!this.isCurrent(generation)) return this.disposedLaunchFailure();
     return { ok: true, ...launched };
   }
 
@@ -414,8 +447,28 @@ export class RunnerService {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.lifecycleGeneration += 1;
     this.prepared = null;
     this.state.detach();
+  }
+
+  private isCurrent(generation: number): boolean {
+    return !this.disposed && generation === this.lifecycleGeneration;
+  }
+
+  private disposedPrepareFailure(): PrepareFailure {
+    return failure("service_disposed", "Runner service was disposed");
+  }
+
+  private disposedLaunchFailure(): ServiceLaunchResult {
+    return {
+      ok: false,
+      code: "service_disposed",
+      diagnostic: "Runner service was disposed",
+      activity: "unknown",
+    };
   }
 }
 

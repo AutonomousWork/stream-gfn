@@ -172,7 +172,7 @@ class BuildReleaseTest(unittest.TestCase):
                     publication=False,
                 )
 
-    def test_publication_requires_clean_tagged_head_but_ignores_untracked(self) -> None:
+    def test_publication_requires_clean_tagged_head_but_allows_unrelated_untracked(self) -> None:
         from scripts import build_release
 
         with tempfile.TemporaryDirectory() as directory:
@@ -207,6 +207,47 @@ class BuildReleaseTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 build_release.ReleaseBuildError, "tracked or staged changes"
             ):
+                build_release.build_release(
+                    repo_root=fixture,
+                    output_dir=fixture / "release",
+                    tag=TAG,
+                    commit=commit,
+                    publication=True,
+                )
+
+    def test_publication_rejects_untracked_runtime_inputs(self) -> None:
+        from scripts import build_release
+
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory) / "fixture"
+            self._copy_runtime_fixture(fixture)
+            self._git(fixture, "init")
+            self._git(fixture, "add", ".")
+            self._git(fixture, "rm", "--cached", "dist/index.js")
+            self._git(
+                fixture,
+                "-c",
+                "user.name=Release Test",
+                "-c",
+                "user.email=release-test@example.invalid",
+                "commit",
+                "-m",
+                "fixture without bundle",
+            )
+            commit = self._git(fixture, "rev-parse", "HEAD").stdout.strip()
+            self._git(fixture, "tag", TAG)
+
+            with self.assertRaisesRegex(build_release.ReleaseBuildError, "not tracked"):
+                build_release.build_release(
+                    repo_root=fixture,
+                    output_dir=fixture / "release",
+                    tag=TAG,
+                    commit=commit,
+                    publication=True,
+                )
+
+            (fixture / "backend/extra.py").write_text("raise RuntimeError\n", encoding="utf-8")
+            with self.assertRaisesRegex(build_release.ReleaseBuildError, "unexpected backend"):
                 build_release.build_release(
                     repo_root=fixture,
                     output_dir=fixture / "release",

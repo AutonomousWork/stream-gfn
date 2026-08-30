@@ -27,7 +27,6 @@ export interface SteamShortcut extends RunnerFingerprint {
 }
 
 export interface SteamLifetimeEvent {
-  runnerShortcutId: string;
   running: boolean;
 }
 
@@ -117,7 +116,7 @@ interface SteamSurface {
   };
   collectionStore: {
     deckDesktopApps: { allApps: Iterable<Partial<OverviewSurface>> };
-    BIsHidden(appId: number): boolean;
+    BIsHidden(appId: number): unknown;
     SetAppsAsHidden(appIds: number[], hidden: boolean): void;
   };
 }
@@ -224,29 +223,35 @@ const sleep = (durationMs: number): Promise<void> =>
         setTimeout(resolve, durationMs);
       });
 
-const isDetails = (value: Partial<AppDetailsSurface>): value is AppDetailsSurface =>
-  Number.isInteger(value.unAppID) &&
+const isDetailsFor = (
+  value: Partial<AppDetailsSurface>,
+  appId: number,
+): value is AppDetailsSurface =>
+  value.unAppID === appId &&
   typeof value.strDisplayName === "string" &&
   typeof value.strShortcutExe === "string" &&
   typeof value.strShortcutStartDir === "string" &&
   typeof value.strLaunchOptions === "string" &&
   typeof value.strShortcutLaunchOptions === "string";
 
-const isOverview = (value: Partial<OverviewSurface> | undefined): value is OverviewSurface =>
+const isOverviewFor = (
+  value: Partial<OverviewSurface> | undefined,
+  appId: number,
+): value is OverviewSurface =>
   value !== undefined &&
-  Number.isInteger(value.appid) &&
+  value.appid === appId &&
   typeof value.display_name === "string" &&
   typeof value.gameid === "string" &&
   value.gameid.length > 0 &&
   typeof value.app_type === "number";
 
-const pathMatchesFingerprint = (expected: string, actual: string): boolean =>
+export const pathMatches = (expected: string, actual: string): boolean =>
   actual === expected || actual === `"${expected}"`;
 
 const hasFingerprint = (shortcut: SteamShortcut, fingerprint: RunnerFingerprint): boolean =>
   shortcut.displayName === fingerprint.displayName &&
-  pathMatchesFingerprint(fingerprint.executablePath, shortcut.executablePath) &&
-  pathMatchesFingerprint(fingerprint.startDirectory, shortcut.startDirectory) &&
+  pathMatches(fingerprint.executablePath, shortcut.executablePath) &&
+  pathMatches(fingerprint.startDirectory, shortcut.startDirectory) &&
   shortcut.launchOptions === fingerprint.launchOptions &&
   shortcut.shortcutLaunchOptions === fingerprint.shortcutLaunchOptions &&
   shortcut.isNonSteamShortcut;
@@ -295,10 +300,13 @@ class BrowserPrivateSteamPort implements PrivateSteamPort {
     const details = await this.readDetails(appId);
     if (details === null) return null;
 
-    let hidden: boolean;
+    let hidden: unknown;
     try {
       hidden = this.surface.collectionStore.BIsHidden(appId);
     } catch (error) {
+      throw new PrivateSteamError("hidden_state_unreadable", "Steam hidden state is unreadable");
+    }
+    if (typeof hidden !== "boolean") {
       throw new PrivateSteamError("hidden_state_unreadable", "Steam hidden state is unreadable");
     }
 
@@ -385,7 +393,7 @@ class BrowserPrivateSteamPort implements PrivateSteamPort {
     if (details === null) return null;
     switch (details.eDisplayStatus) {
       case "ReadyToLaunch":
-      case 10:
+      case 11:
         return "ReadyToLaunch";
       case "Launching":
       case 1:
@@ -404,15 +412,10 @@ class BrowserPrivateSteamPort implements PrivateSteamPort {
   subscribeLifetime(listener: (event: SteamLifetimeEvent) => void): () => void {
     const unregisterable =
       this.surface.SteamClient.GameSessions.RegisterForAppLifetimeNotifications((event) => {
-        if (!Number.isInteger(event.unAppID) || typeof event.bRunning !== "boolean") return;
-        try {
-          listener({
-            runnerShortcutId: shortcutIdFromNumber(event.unAppID as number),
-            running: event.bRunning,
-          });
-        } catch (_error) {
-          // Ignore malformed foreign notifications; they cannot describe our runner.
-        }
+        if (typeof event.bRunning !== "boolean") return;
+        // Steam reports unAppID=0 for non-Steam shortcuts. Treat the event only as
+        // a wakeup; RunnerStateTracker confirms the exact runner through AppDetails.
+        listener({ running: event.bRunning });
       });
     let active = true;
     return () => {
@@ -433,7 +436,7 @@ class BrowserPrivateSteamPort implements PrivateSteamPort {
 
   private readOverview(appId: number): OverviewSurface | null {
     const overview = this.surface.appStore.m_mapApps.get(appId);
-    return isOverview(overview) ? overview : null;
+    return isOverviewFor(overview, appId) ? overview : null;
   }
 
   private async readDetails(appId: number): Promise<AppDetailsSurface | null> {
@@ -451,7 +454,7 @@ class BrowserPrivateSteamPort implements PrivateSteamPort {
 
       try {
         unregisterable = this.surface.SteamClient.Apps.RegisterForAppDetails(appId, (details) => {
-          finish(isDetails(details) ? details : null);
+          finish(isDetailsFor(details, appId) ? details : null);
         });
         if (completed) unregisterable.unregister();
       } catch (_error) {
