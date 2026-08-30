@@ -1,4 +1,4 @@
-"""Versioned backend state contract for the shared Steam runner."""
+"""Versioned Decky backend state contract for the shared Steam runner."""
 
 import json
 import os

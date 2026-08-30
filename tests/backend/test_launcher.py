@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from backend import launcher
+from py_modules.stream_gfn_backend import launcher
 
 
 class LauncherTest(unittest.TestCase):

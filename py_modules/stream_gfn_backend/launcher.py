@@ -1,4 +1,4 @@
-"""Strict GeForce NOW launcher for supported Steam titles."""
+"""Strict GeForce NOW launcher for the Decky-loaded backend."""
 
 import os
 import re
@@ -9,7 +9,7 @@ from typing import Callable, List, Optional, Sequence, TextIO, TypedDict
 
 
 FLATPAK_PATH = "/usr/bin/flatpak"
-RUNNER_PATH = str(Path(__file__).resolve().parents[1] / "bin" / "gfn-launch")
+RUNNER_PATH = str(Path(__file__).resolve().parents[2] / "bin" / "gfn-launch")
 SUPPORTED_APP_ID = "1903340"
 EXPEDITION_33_ROUTE = (
     "#?cmsId=103134919&launchSource=External&shortName=game_gfn_pc"

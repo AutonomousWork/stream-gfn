@@ -6,9 +6,9 @@ from pathlib import Path
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PLUGIN_ROOT))
+sys.path.insert(0, str(PLUGIN_ROOT / "py_modules"))
 
-from backend.launcher import main  # noqa: E402
+from stream_gfn_backend.launcher import main  # noqa: E402
 
 
 if __name__ == "__main__":

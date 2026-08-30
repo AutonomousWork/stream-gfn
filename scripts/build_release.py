@@ -35,10 +35,10 @@ FIXED_RUNTIME_FILES = (
     "plugin.json",
 )
 FIXED_BACKEND_FILES = (
-    "backend/__init__.py",
-    "backend/identity.py",
-    "backend/launcher.py",
-    "backend/settings.py",
+    "py_modules/stream_gfn_backend/__init__.py",
+    "py_modules/stream_gfn_backend/identity.py",
+    "py_modules/stream_gfn_backend/launcher.py",
+    "py_modules/stream_gfn_backend/settings.py",
 )
 
 
@@ -149,7 +149,7 @@ def build_release(
 
 def _runtime_sources(root: Path) -> Sequence[Tuple[str, Path]]:
     relative_paths = [*FIXED_RUNTIME_FILES, *FIXED_BACKEND_FILES]
-    backend = root / "backend"
+    backend = root / "py_modules" / "stream_gfn_backend"
     _require_directory(root, backend)
     allowed_backend = set(FIXED_BACKEND_FILES)
     unexpected_backend = sorted(

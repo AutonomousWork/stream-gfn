@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TAG = "v0.1.0-alpha.1"
+TAG = "v0.1.0-alpha.2"
 ASSET_URL = (
     "https://github.com/AutonomousWork/stream-gfn/releases/download/"
     f"{TAG}/stream-gfn-{TAG}.zip"

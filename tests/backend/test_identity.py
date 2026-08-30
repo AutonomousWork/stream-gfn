@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from backend import identity
+from py_modules.stream_gfn_backend import identity
 
 
 class BuildIdentityTest(unittest.TestCase):

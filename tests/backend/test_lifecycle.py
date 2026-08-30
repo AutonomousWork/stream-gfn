@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from backend import launcher
+from py_modules.stream_gfn_backend import launcher
 
 
 class PluginLifecycleTest(unittest.TestCase):
@@ -16,6 +16,8 @@ class PluginLifecycleTest(unittest.TestCase):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.settings_dir = Path(self.temp_directory.name) / "settings"
         self.plugin_root = Path(__file__).resolve().parents[2]
+        self.py_modules = str(self.plugin_root / "py_modules")
+        sys.path.insert(0, self.py_modules)
         sys.modules["decky"] = types.SimpleNamespace(
             logger=self.logger,
             DECKY_PLUGIN_DIR=str(self.plugin_root),
@@ -27,6 +29,12 @@ class PluginLifecycleTest(unittest.TestCase):
     def tearDown(self) -> None:
         sys.modules.pop("main", None)
         sys.modules.pop("decky", None)
+        for module_name in tuple(sys.modules):
+            if module_name == "stream_gfn_backend" or module_name.startswith(
+                "stream_gfn_backend."
+            ):
+                sys.modules.pop(module_name, None)
+        sys.path.remove(self.py_modules)
         self.temp_directory.cleanup()
 
     def test_lifecycle_loads_and_unloads_without_filesystem_writes(self) -> None:

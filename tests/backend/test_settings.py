@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend import settings
+from py_modules.stream_gfn_backend import settings
 
 
 class SettingsStateTest(unittest.TestCase):
@@ -71,7 +71,10 @@ class StateStoreTest(unittest.TestCase):
                 "runnerShortcutId": "4294967295",
             }
 
-            with patch("backend.settings.os.replace", wraps=os.replace) as replace:
+            with patch(
+                "py_modules.stream_gfn_backend.settings.os.replace",
+                wraps=os.replace,
+            ) as replace:
                 store.save(state)
 
             source, destination = replace.call_args.args
@@ -96,7 +99,8 @@ class StateStoreTest(unittest.TestCase):
             store.save(original)
 
             with patch(
-                "backend.settings.os.replace", side_effect=OSError("replace failed")
+                "py_modules.stream_gfn_backend.settings.os.replace",
+                side_effect=OSError("replace failed"),
             ):
                 with self.assertRaisesRegex(OSError, "replace failed"):
                     store.save(

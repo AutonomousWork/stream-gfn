@@ -2,7 +2,7 @@
 
 Stream GFN adds a one-tap **Stream on GeForce NOW** action to the normal Steam library page for supported games. This prerelease supports only *Clair Obscur: Expedition 33* (Steam AppID `1903340`) and reuses one hidden Steam shortcut rather than creating a shortcut per title.
 
-> **UNVALIDATED DEVICE BUILD:** `v0.1.0-alpha.1` still requires the recorded Legion Go S proof. It is a test build, not a stable release.
+> **UNVALIDATED DEVICE BUILD:** `v0.1.0-alpha.2` still requires the recorded Legion Go S proof. It is a test build, not a stable release. Do not use `v0.1.0-alpha.1`; its backend cannot load under Decky.
 
 ## Install on the Legion Go S
 
@@ -15,13 +15,13 @@ The primary installation path stays in Gaming Mode:
 3. Paste this exact release asset URL:
 
    ```text
-   https://github.com/AutonomousWork/stream-gfn/releases/download/v0.1.0-alpha.1/stream-gfn-v0.1.0-alpha.1.zip
+   https://github.com/AutonomousWork/stream-gfn/releases/download/v0.1.0-alpha.2/stream-gfn-v0.1.0-alpha.2.zip
    ```
 
 4. Install the plugin, then reload Decky if prompted.
-5. Open the Stream GFN panel and confirm it reports tag `v0.1.0-alpha.1` and the commit shown on the GitHub release.
+5. Open the Stream GFN panel and confirm it reports tag `v0.1.0-alpha.2` and the commit shown on the GitHub release.
 
-Do **not** install GitHub's automatically generated **Source code (zip)**. It is not the Decky package and does not contain the generated frontend bundle or packaged build identity. Use the asset named `stream-gfn-v0.1.0-alpha.1.zip`.
+Do **not** install GitHub's automatically generated **Source code (zip)**. It is not the Decky package and does not contain the generated frontend bundle or packaged build identity. Use the asset named `stream-gfn-v0.1.0-alpha.2.zip`.
 
 ### Desktop Mode fallback
 
@@ -34,8 +34,8 @@ If Install Plugin from URL is unavailable, download the named ZIP asset and its 
 For example, from the download directory:
 
 ```sh
-sha256sum -c stream-gfn-v0.1.0-alpha.1.zip.sha256
-unzip stream-gfn-v0.1.0-alpha.1.zip -d ~/homebrew/plugins
+sha256sum -c stream-gfn-v0.1.0-alpha.2.zip.sha256
+unzip stream-gfn-v0.1.0-alpha.2.zip -d ~/homebrew/plugins
 ```
 
 Reload Decky or restart Gaming Mode after extraction. An upgrade replaces the plugin directory but must not silently remove the reusable hidden runner.
@@ -57,10 +57,10 @@ pnpm verify
 
 `pnpm verify` typechecks, runs frontend and backend tests, builds `dist/index.js`, tests the release packager, and produces:
 
-- `release/stream-gfn-v0.1.0-alpha.1.zip`
-- `release/stream-gfn-v0.1.0-alpha.1.zip.sha256`
+- `release/stream-gfn-v0.1.0-alpha.2.zip`
+- `release/stream-gfn-v0.1.0-alpha.2.zip.sha256`
 
-The normal bundle command is explicitly for dirty-tree/CI verification. `pnpm run bundle:publication` is the release-owner gate: it requires no tracked or staged changes and requires tag `v0.1.0-alpha.1` to resolve to the exact packaged `HEAD`. Untracked workspace files are excluded by the package allowlist and do not affect that source-cleanliness gate.
+The normal bundle command is explicitly for dirty-tree/CI verification. `pnpm run bundle:publication` is the release-owner gate: it requires no tracked or staged changes and requires tag `v0.1.0-alpha.2` to resolve to the exact packaged `HEAD`. Untracked workspace files are excluded by the package allowlist and do not affect that source-cleanliness gate.
 
 ## License
 

@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TAG = "v0.1.0-alpha.1"
+TAG = "v0.1.0-alpha.2"
 COMMIT = "a" * 40
 ARCHIVE_NAME = f"stream-gfn-{TAG}.zip"
 
@@ -48,16 +48,16 @@ class BuildReleaseTest(unittest.TestCase):
             expected_files = {
                 "stream-gfn/LICENSE",
                 "stream-gfn/README.md",
-                "stream-gfn/backend/__init__.py",
-                "stream-gfn/backend/identity.py",
-                "stream-gfn/backend/launcher.py",
-                "stream-gfn/backend/settings.py",
                 "stream-gfn/bin/gfn-launch",
                 "stream-gfn/build-info.json",
                 "stream-gfn/dist/index.js",
                 "stream-gfn/main.py",
                 "stream-gfn/package.json",
                 "stream-gfn/plugin.json",
+                "stream-gfn/py_modules/stream_gfn_backend/__init__.py",
+                "stream-gfn/py_modules/stream_gfn_backend/identity.py",
+                "stream-gfn/py_modules/stream_gfn_backend/launcher.py",
+                "stream-gfn/py_modules/stream_gfn_backend/settings.py",
             }
 
             with zipfile.ZipFile(result.archive) as archive:
@@ -99,13 +99,18 @@ class BuildReleaseTest(unittest.TestCase):
                     sys.executable,
                     "-c",
                     (
-                        "import pathlib, sys, types; "
+                        "import asyncio, importlib.util, pathlib, sys, types; "
                         "root = pathlib.Path(sys.argv[1]); "
                         "decky = types.ModuleType('decky'); "
                         "decky.logger = type('Logger', (), {'info': lambda *args: None})(); "
-                        "sys.modules['decky'] = decky; sys.path.insert(0, str(root)); "
-                        "import main; from backend.identity import load_build_identity; "
-                        "identity = load_build_identity(root); "
+                        "decky.DECKY_PLUGIN_DIR = str(root); "
+                        "decky.DECKY_PLUGIN_SETTINGS_DIR = str(root / 'settings'); "
+                        "sys.modules['decky'] = decky; "
+                        "sys.path.append(str(root / 'py_modules')); "
+                        "spec = importlib.util.spec_from_file_location('_', root / 'main.py'); "
+                        "module = importlib.util.module_from_spec(spec); "
+                        "spec.loader.exec_module(module); "
+                        "identity = asyncio.run(module.Plugin().get_build_identity()); "
                         "assert identity['tag'] == sys.argv[2]; "
                         "assert identity['commit'] == sys.argv[3]"
                     ),
@@ -116,6 +121,7 @@ class BuildReleaseTest(unittest.TestCase):
                 capture_output=True,
                 check=False,
                 text=True,
+                cwd=output_dir,
             )
             self.assertEqual(smoke.returncode, 0, smoke.stderr)
 
@@ -160,8 +166,11 @@ class BuildReleaseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory) / "fixture"
             self._copy_runtime_fixture(fixture)
-            (fixture / "backend/launcher.py").unlink()
-            (fixture / "backend/launcher.py").symlink_to(fixture / "main.py")
+            backend_launcher = (
+                fixture / "py_modules/stream_gfn_backend/launcher.py"
+            )
+            backend_launcher.unlink()
+            backend_launcher.symlink_to(fixture / "main.py")
 
             with self.assertRaisesRegex(build_release.ReleaseBuildError, "symlink"):
                 build_release.build_release(
@@ -246,7 +255,9 @@ class BuildReleaseTest(unittest.TestCase):
                     publication=True,
                 )
 
-            (fixture / "backend/extra.py").write_text("raise RuntimeError\n", encoding="utf-8")
+            (fixture / "py_modules/stream_gfn_backend/extra.py").write_text(
+                "raise RuntimeError\n", encoding="utf-8"
+            )
             with self.assertRaisesRegex(build_release.ReleaseBuildError, "unexpected backend"):
                 build_release.build_release(
                     repo_root=fixture,
@@ -272,15 +283,15 @@ class BuildReleaseTest(unittest.TestCase):
         for relative in (
             "LICENSE",
             "README.md",
-            "backend/__init__.py",
-            "backend/identity.py",
-            "backend/launcher.py",
-            "backend/settings.py",
             "bin/gfn-launch",
             "dist/index.js",
             "main.py",
             "package.json",
             "plugin.json",
+            "py_modules/stream_gfn_backend/__init__.py",
+            "py_modules/stream_gfn_backend/identity.py",
+            "py_modules/stream_gfn_backend/launcher.py",
+            "py_modules/stream_gfn_backend/settings.py",
         ):
             source = REPO_ROOT / relative
             target = destination / relative

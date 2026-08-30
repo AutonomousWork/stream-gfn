@@ -1,4 +1,4 @@
-"""Read-only packaged build identity with an explicit development fallback."""
+"""Read-only packaged build identity for the Decky-loaded backend."""
 
 import json
 import re

@@ -6,7 +6,7 @@ from typing import Optional
 
 import decky
 
-from backend import identity, launcher, settings
+from stream_gfn_backend import identity, launcher, settings
 
 
 class Plugin:
