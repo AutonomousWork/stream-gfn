@@ -1,86 +1,95 @@
-# U7 Legion Go S device proof
+# Legion Go S prerelease proof
 
-U7 is a hard gate. Do not begin U3-U6 shortcut automation, page injection, proof bundling, or integrated testing until both checks below are `GO` on the target Legion Go S.
+This checklist validates the exact GitHub prerelease after it is published. It does not block implementation or prerelease publication. It blocks stable promotion and support for additional titles.
 
-## Prerequisites and record
+## 1. Download the released artifact
 
-- Legion Go S is in Gaming Mode with Decky Loader available.
-- The official `com.nvidia.geforcenow` Flatpak is installed, authenticated, and fully stopped.
-- The current branch and its executable `bin/gfn-launch` runner are available on the device.
-- Evidence is sanitized: never capture account names, tokens, cookies, device credentials, or unrelated library entries.
+Open the GitHub release page in the Legion Go S browser. Download both assets:
 
-Record the exact test tuple before running:
+- `stream-gfn-v0.1.0-alpha.1.zip`
+- `stream-gfn-v0.1.0-alpha.1.zip.sha256`
+
+Record the release URL, tag, target commit, date, and operator. Verify the checksum before installation:
+
+```sh
+sha256sum -c stream-gfn-v0.1.0-alpha.1.zip.sha256
+```
+
+The result must be `OK`. Extract the archive and confirm it contains one top-level `stream-gfn/` directory. Copy that directory to Decky's plugins directory using the installation method appropriate for the device, then restart or reload Decky. The plugin panel must report tag `v0.1.0-alpha.1` and the same commit as the release.
+
+Browser download is only transport; it does not automatically install the Decky plugin.
+
+## 2. Record the target tuple
+
+GFN must be installed from Flatpak, authenticated, and fully stopped. Sanitize all evidence; never include account names, tokens, cookies, device credentials, or unrelated library entries.
 
 | Field | Value |
 |---|---|
 | Date and operator | |
-| Plugin commit | |
+| Release URL | |
+| ZIP SHA-256 | |
+| Plugin tag and commit | |
 | Decky Loader | |
 | Steam client | |
 | SteamOS | |
 | GFN Flatpak | |
 
-Record the pre-run shortcut inventory as a total count plus proof-owned entries only. Record whether Steam considers the proof runner active and the output of:
+Before testing, record the total non-Steam shortcut count, plugin-owned entries only, and the sanitized result of:
 
 ```sh
 /usr/bin/pgrep -af 'com.nvidia.geforcenow|/app/cef/GeForceNOW'
 ```
 
-The process check must return no matches. Sanitize all captured output.
+The process check must return no matches.
 
-## 1. Direct route
+## 3. Direct packaged-runner route
 
-From the plugin root, run the executable wrapper with exactly one positional argument:
+From the installed plugin directory, run:
 
 ```sh
 ./bin/gfn-launch 1903340
 ```
 
-Pass only if GFN identifies *Clair Obscur: Expedition 33* in allocation or a queue. A generic GFN home, sign-in, error, or game-selection screen is not sufficient. Capture sanitized title-identifying evidence, then close GFN completely before the lifecycle check.
+Pass only if GFN identifies *Clair Obscur: Expedition 33* in allocation or a queue. GFN home, sign-in, an error, or a game-selection screen is not sufficient. Capture sanitized title-identifying evidence, then close GFN completely.
 
-## 2. Manual Steam lifecycle
+## 4. One-tap Steam-library flow
 
-Create one temporary non-Steam shortcut owned only by this proof. Before creating it, record this complete fingerprint as exact strings:
+In Gaming Mode, open Expedition 33's normal Steam page. Confirm Steam's native action is unchanged and a single `Stream on GeForce NOW` action is present.
 
-| Fingerprint field | Required value |
-|---|---|
-| Display name | `Stream GFN U7 Temporary Runner` |
-| Target executable | Absolute path to this checkout's `bin/gfn-launch` |
-| Start directory | Absolute path to this checkout |
-| Stored launch options | `1903340` |
-| Steam shortcut ID | Record as an opaque string |
-| Steam 64-bit game ID | Record as an opaque string |
+Activate the streaming action once and verify:
 
-Do not reuse, edit, or delete a shortcut that differs in any fingerprint field. Launch this temporary shortcut from Gaming Mode and verify all of the following:
+1. GFN reaches title-identifying Expedition 33 allocation or queue without another Play action.
+2. The plugin owns exactly one hidden runner named `Stream GFN Runner`.
+3. Its executable and start directory resolve inside the installed `stream-gfn/` directory.
+4. Both stored launch-option fields are empty; the launch receives only `1903340` as the per-call argument.
+5. Gamescope gives GFN foreground input without Desktop Mode fallback.
+6. A named built-in controller action responds.
+7. Steam's overlay opens and closes over GFN.
+8. Steam's **Exit Game** action ends the runner and owned GFN process.
 
-1. GFN reaches title-identifying Expedition 33 allocation or queue and receives Gamescope foreground input without falling back to Desktop Mode.
-2. The operator names and tests one specific built-in Legion Go S controller action (for example, left-stick navigation) and records the observed response.
-3. The Steam overlay opens and closes over GFN.
-4. Steam's **Exit Game** action is used to end the temporary runner.
+After Exit Game, poll every 500 ms for up to 10 seconds. Pass only after two consecutive polls where Steam reports the runner exactly `ReadyToLaunch` and the process check returns no matches. Missing, unrecognized, failed, timed-out, `Launching`, `Running`, or `Terminating` state is not ready.
 
-Record the exact Steam API path or state primitive used to read the verified runner's current state, plus its raw value. Normalize an explicit running value to `active`, an explicit stopped value to `inactive`, and any missing API, exception, timeout, or ambiguous value to `unknown`. Only `inactive` satisfies the exit check.
+Repeat the complete launch and exit cycle once. The same runner identity must be reused, its hidden state must remain true, and the plugin-owned runner count must remain one.
 
-After Exit Game, poll every 500 ms for at most 10 seconds. Success requires two consecutive polls where both conditions hold:
+## 5. Fail-closed and cleanup checks
 
-- the recorded Steam state primitive reports the temporary runner `inactive`; and
-- `/usr/bin/pgrep -af 'com.nvidia.geforcenow|/app/cef/GeForceNOW'` returns no matches.
+- Invoke the packaged runner with an unsupported AppID. It must exit non-zero before starting GFN.
+- Reload the plugin during an active session. It must rehydrate Active or Unknown and must not launch again or create a duplicate.
+- Use the plugin's explicit `Remove hidden runner` action only after the runner is verified inactive. It must reverify the complete fingerprint, remove that one shortcut, wait for absence, and then clear saved state.
+- If any ownership field is missing or different, leave the shortcut untouched and record the mismatch.
 
-Any `unknown` Steam state fails the lifecycle check.
+Plugin unload or ordinary upgrade must remove frontend patches and listeners but must not silently delete the reusable runner.
 
 ## Results
 
 | Check | Status | Evidence link | Notes |
 |---|---|---|---|
-| Direct route | NOT RUN | | |
-| Manual lifecycle | NOT RUN | | |
+| Browser download, checksum, and installed identity | NOT RUN | | |
+| Direct packaged-runner route | NOT RUN | | |
+| First one-tap lifecycle | NOT RUN | | |
+| Second one-tap lifecycle and constant footprint | NOT RUN | | |
+| Unsupported AppID | NOT RUN | | |
+| Reload without relaunch or duplicate | NOT RUN | | |
+| Explicit cleanup | NOT RUN | | |
 
-Mark U7 `GO` only when both rows pass. A falsified route or lifecycle is `NO-GO` and stops U3-U6. Unavailable hardware or device access is `BLOCKED / NOT RUN`, not `NO-GO`.
-
-## Safe cleanup
-
-1. Use Steam's **Exit Game** for the proof-owned runner, then repeat the two-consecutive-poll lifecycle check.
-2. Re-read every fingerprint field and both opaque IDs from the temporary shortcut. Remove it only if the complete fingerprint exactly matches the values recorded before creation.
-3. If any field is missing or different, leave the shortcut untouched and record the mismatch.
-4. Record the final total shortcut count, proof-owned entries, normalized Steam state, and sanitized GFN process state.
-
-The device proof is currently blocked until the operator supplies access to the Legion Go S. No credentials need to be included in the proof record.
+Mark `GO` only when every row passes. A falsified route, identity, ownership, lifecycle, or one-tap behavior is `NO-GO`; update the GitHub prerelease title or notes to `NO-GO / DO NOT USE` and do not promote it. Unavailable device access is `BLOCKED / NOT RUN`, not `NO-GO`.
