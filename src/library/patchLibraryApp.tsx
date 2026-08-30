@@ -127,11 +127,18 @@ export const injectLibraryAction = (
   const appPanelIndex = children.findIndex((value) => {
     if (typeof value !== "object" || value === null) return false;
     const props = (value as TreeNode).props;
-    return props?.overview !== undefined && typeof props.onShowLaunchingDetails === "function";
+    const panelProps = (props?.children as TreeNode | undefined)?.props;
+    return (
+      props?.childFocusDisabled !== undefined &&
+      props.navRef !== undefined &&
+      panelProps?.details !== undefined &&
+      panelProps.overview !== undefined &&
+      panelProps.bFastRender !== undefined
+    );
   });
-  const insertionIndex = appPanelIndex >= 0 ? appPanelIndex : children.length;
+  if (appPanelIndex < 0) return "missing-action-area";
   try {
-    children.splice(insertionIndex, 0, action);
+    children.splice(appPanelIndex, 0, action);
   } catch (_error) {
     return "missing-action-area";
   }

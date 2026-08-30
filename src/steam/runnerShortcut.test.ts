@@ -249,6 +249,22 @@ describe("runner fingerprint and reconciliation", () => {
     expect(steam.calls.some((call) => call.startsWith("remove:"))).toBe(false);
   });
 
+  it("repairs one uniquely plugin-owned partial runner in place", async () => {
+    const backend = new FakeBackend();
+    const steam = new FakeSteam();
+    steam.shortcuts = [exactRunner("42", { startDirectory: "", hidden: false })];
+
+    const result = await prepareRunner(backend, steam);
+
+    expect(result).toMatchObject({ ok: true, created: false, recovered: true });
+    expect(steam.shortcuts).toEqual([exactRunner("42")]);
+    expect(backend.saves).toEqual(["42"]);
+    expect(steam.calls).toContain("configure:42");
+    expect(steam.calls).toContain("hide:42:true");
+    expect(steam.calls.some((call) => call.startsWith("add:"))).toBe(false);
+    expect(steam.calls.some((call) => call.startsWith("remove:"))).toBe(false);
+  });
+
   it("creates, corrects, verifies, hides, uniquely reverifies, and persists one runner", async () => {
     const backend = new FakeBackend();
     const steam = new FakeSteam();

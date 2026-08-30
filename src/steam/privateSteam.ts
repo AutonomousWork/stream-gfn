@@ -327,8 +327,8 @@ class BrowserPrivateSteamPort implements PrivateSteamPort {
     const id = await this.surface.SteamClient.Apps.AddShortcut(
       fingerprint.displayName,
       fingerprint.executablePath,
-      fingerprint.startDirectory,
-      fingerprint.launchOptions,
+      "",
+      "",
     );
     return shortcutIdFromNumber(id);
   }

@@ -26,14 +26,22 @@ const action = { props: { [LIBRARY_ACTION_MARKER]: true } };
 
 const libraryTree = () => {
   const nativeAction = { props: { id: "native-play" } };
-  const appPanel = { props: { overview: {}, onShowLaunchingDetails: () => undefined } };
+  const appPanel = {
+    props: {
+      childFocusDisabled: false,
+      navRef: {},
+      children: {
+        props: { details: {}, overview: {}, bFastRender: false },
+      },
+    },
+  };
   const parent = {
     props: {
       className: "SteamInnerContainer extra",
       children: [nativeAction, appPanel] as unknown[],
     },
   };
-  return { tree: { props: { children: parent } }, parent, nativeAction };
+  return { tree: { props: { children: parent } }, parent, nativeAction, appPanel };
 };
 
 describe("Expedition 33 library action patch", () => {
@@ -45,14 +53,13 @@ describe("Expedition 33 library action patch", () => {
     expect(isExpedition33AppId(null)).toBe(false);
   });
 
-  it("injects once for Expedition 33 while retaining the native action", () => {
-    const { tree, parent, nativeAction } = libraryTree();
+  it("injects once immediately before Steam's current app-panel wrapper", () => {
+    const { tree, parent, nativeAction, appPanel } = libraryTree();
 
     expect(
       injectLibraryAction(tree, EXPEDITION_33_APP_ID_NUMBER, action, "SteamInnerContainer"),
     ).toBe("injected");
-    expect(parent.props.children).toContain(nativeAction);
-    expect(parent.props.children).toContain(action);
+    expect(parent.props.children).toEqual([nativeAction, action, appPanel]);
     expect(
       injectLibraryAction(tree, EXPEDITION_33_APP_ID_NUMBER, action, "SteamInnerContainer"),
     ).toBe("already-present");

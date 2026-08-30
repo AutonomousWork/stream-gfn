@@ -68,6 +68,19 @@ const isNearMatch = (shortcut: SteamShortcut, fingerprint: RunnerFingerprint): b
     pathMatches(fingerprint.executablePath, shortcut.executablePath) ||
     pathMatches(fingerprint.startDirectory, shortcut.startDirectory));
 
+const isRepairableOwnedRunner = (
+  shortcut: SteamShortcut,
+  fingerprint: RunnerFingerprint,
+): boolean =>
+  shortcut.displayName === fingerprint.displayName &&
+  pathMatches(fingerprint.executablePath, shortcut.executablePath) &&
+  (shortcut.startDirectory === "" ||
+    pathMatches(fingerprint.startDirectory, shortcut.startDirectory)) &&
+  shortcut.launchOptions === "" &&
+  shortcut.shortcutLaunchOptions === "" &&
+  shortcut.isNonSteamShortcut &&
+  shortcut.runnerGameId64.length > 0;
+
 const inspectInventory = (
   inventory: SteamShortcut[],
   fingerprint: RunnerFingerprint,
@@ -86,6 +99,65 @@ const identityOf = (shortcut: SteamShortcut): PreparedRunner => ({
   runnerShortcutId: shortcut.runnerShortcutId,
   runnerGameId64: shortcut.runnerGameId64,
 });
+
+const repairableOwnedCandidate = (
+  inspection: InventoryInspection,
+  fingerprint: RunnerFingerprint,
+): SteamShortcut | null => {
+  if (inspection.exact.length === 1 && inspection.near.length === 0) {
+    const exact = inspection.exact[0];
+    return !exact.hidden && isRepairableOwnedRunner(exact, fingerprint) ? exact : null;
+  }
+  if (inspection.exact.length === 0 && inspection.near.length === 1) {
+    const near = inspection.near[0];
+    return isRepairableOwnedRunner(near, fingerprint) ? near : null;
+  }
+  return null;
+};
+
+const repairOwnedRunner = async (
+  backend: BackendPort,
+  steam: PrivateSteamPort,
+  candidate: SteamShortcut,
+  fingerprint: RunnerFingerprint,
+  canContinue: () => boolean,
+): Promise<PrepareRunnerResult> => {
+  try {
+    if (!canContinue()) throw new Error("Runner preparation was cancelled");
+    await steam.configureShortcut(candidate.runnerShortcutId, fingerprint);
+    const configured = await steam.waitForFingerprint(candidate.runnerShortcutId, fingerprint);
+    if (configured === null) throw new Error("Steam did not repair the runner fingerprint");
+    if (!(await steam.setHidden(candidate.runnerShortcutId, true))) {
+      throw new Error("Steam did not verify the repaired runner as hidden");
+    }
+
+    const finalInventory = inspectInventory(await steam.listShortcuts(), fingerprint);
+    if (!canContinue()) throw new Error("Runner preparation was cancelled");
+    const repaired = finalInventory.exact[0];
+    if (
+      finalInventory.near.length > 0 ||
+      finalInventory.exact.length !== 1 ||
+      repaired?.runnerShortcutId !== candidate.runnerShortcutId ||
+      repaired.runnerGameId64.length === 0 ||
+      !repaired.hidden
+    ) {
+      throw new Error("Steam did not verify one unique repaired runner");
+    }
+
+    await backend.saveState(repaired.runnerShortcutId);
+    return {
+      ok: true,
+      runner: identityOf(repaired),
+      created: false,
+      recovered: true,
+    };
+  } catch (error) {
+    return failure(
+      "repair_failed",
+      error instanceof Error ? error.message : "Runner repair failed",
+    );
+  }
+};
 
 const requireUnambiguousOwned = (
   inspection: InventoryInspection,
@@ -157,7 +229,12 @@ export const prepareRunner = async (
   if (!canContinue()) return failure("operation_cancelled", "Runner preparation was cancelled");
 
   const fingerprint = fingerprintFor(paths);
-  const resolved = requireUnambiguousOwned(inspectInventory(inventory, fingerprint));
+  const inspection = inspectInventory(inventory, fingerprint);
+  const repairable = repairableOwnedCandidate(inspection, fingerprint);
+  if (repairable !== null) {
+    return repairOwnedRunner(backend, steam, repairable, fingerprint, canContinue);
+  }
+  const resolved = requireUnambiguousOwned(inspection);
   if (resolved.error !== null) return resolved.error;
 
   if (savedId !== null) {

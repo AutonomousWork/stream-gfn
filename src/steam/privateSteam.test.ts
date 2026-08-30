@@ -90,6 +90,29 @@ describe("private Steam adapter", () => {
     await expect(result.port?.getShortcut("01")).rejects.toThrow("safe uint32");
   });
 
+  it("creates shortcuts with Steam's stable empty placeholders before configuring exact fields", async () => {
+    const { source, apps } = makeSurface();
+    const result = createPrivateSteamAdapter(source);
+    const fingerprint = {
+      displayName: "Stream GFN Runner",
+      executablePath: "/plugin/bin/gfn-launch",
+      startDirectory: "/plugin",
+      launchOptions: "",
+      shortcutLaunchOptions: "",
+    };
+
+    await expect(result.port?.addShortcut(fingerprint)).resolves.toBe("42");
+    await result.port?.configureShortcut("42", fingerprint);
+
+    expect(apps.AddShortcut).toHaveBeenCalledWith(
+      fingerprint.displayName,
+      fingerprint.executablePath,
+      "",
+      "",
+    );
+    expect(apps.SetShortcutStartDir).toHaveBeenCalledWith(42, fingerprint.startDirectory);
+  });
+
   it("uses the fixed library-details launch source without parsing opaque identity", () => {
     const { source, apps } = makeSurface();
     const result = createPrivateSteamAdapter(source);
