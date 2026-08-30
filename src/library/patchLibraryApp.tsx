@@ -1,5 +1,6 @@
 import { routerHook } from "@decky/api";
 import {
+  Navigation,
   afterPatch,
   appDetailsClasses,
   createReactTreePatcher,
@@ -29,6 +30,7 @@ type TreeNode = {
 
 export interface LibraryPatchController {
   readonly canPatchLibrary: boolean;
+  consumeRunnerRedirect(appId: unknown): boolean;
   reportLibraryCompatibility(report: LibraryCompatibilityReport): void;
 }
 
@@ -56,6 +58,7 @@ export interface LibraryPatchDependencies {
   ): (args: unknown[], result: unknown) => unknown;
   innerContainerClass: string;
   createAction(controller: LibraryPatchController): ReactElement | object;
+  navigateBack(): void;
 }
 
 export interface LibraryPatchHandle {
@@ -155,6 +158,7 @@ const defaultDependencies = (controller: LibraryPatchController): LibraryPatchDe
     const markerProps = { [LIBRARY_ACTION_MARKER]: true };
     return <GfnLaunchButton {...markerProps} controller={controller as GfnLaunchController} />;
   },
+  navigateBack: () => Navigation.NavigateBack(),
 });
 
 export const installLibraryAppPatch = (
@@ -217,6 +221,10 @@ export const installLibraryAppPatch = (
           },
         ],
         (_args, renderedTree) => {
+          if (controller.consumeRunnerRedirect(appId)) {
+            dependencies.navigateBack();
+            return renderedTree;
+          }
           const result = injectLibraryAction(
             renderedTree,
             appId,

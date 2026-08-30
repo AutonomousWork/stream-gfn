@@ -7,20 +7,20 @@ This checklist validates the exact GitHub prerelease after it is published. It d
 Open Decky Settings on the Legion Go S, choose **Install Plugin from URL**, and paste the exact packaged-asset URL:
 
 ```text
-https://github.com/AutonomousWork/stream-gfn/releases/download/v0.1.0-alpha.4/stream-gfn-v0.1.0-alpha.4.zip
+https://github.com/AutonomousWork/stream-gfn/releases/download/v0.1.0-alpha.5/stream-gfn-v0.1.0-alpha.5.zip
 ```
 
-Do not choose GitHub's generated **Source code (zip)**. It is not the Decky package. After installation, reload Decky if prompted. The plugin panel must report tag `v0.1.0-alpha.4` and the same commit as the release.
+Do not choose GitHub's generated **Source code (zip)**. It is not the Decky package. After installation, reload Decky if prompted. The plugin panel must report tag `v0.1.0-alpha.5` and the same commit as the release.
 
 For independent checksum evidence or when Install Plugin from URL is unavailable, use the Desktop Mode fallback. Open the GitHub release page in the browser and download both named assets:
 
-- `stream-gfn-v0.1.0-alpha.4.zip`
-- `stream-gfn-v0.1.0-alpha.4.zip.sha256`
+- `stream-gfn-v0.1.0-alpha.5.zip`
+- `stream-gfn-v0.1.0-alpha.5.zip.sha256`
 
 Record the release URL, tag, target commit, date, and operator. Verify the checksum before installation:
 
 ```sh
-sha256sum -c stream-gfn-v0.1.0-alpha.4.zip.sha256
+sha256sum -c stream-gfn-v0.1.0-alpha.5.zip.sha256
 ```
 
 The result must be `OK`. Extract the archive and confirm it contains one top-level `stream-gfn/` directory. Install that directory at `~/homebrew/plugins/stream-gfn`, then restart or reload Decky and confirm the packaged identity again.
@@ -66,14 +66,15 @@ In Gaming Mode, open Expedition 33's normal Steam page. Confirm Steam's native a
 
 Activate the streaming action once and verify:
 
-1. GFN reaches title-identifying Expedition 33 allocation or queue without another Play action.
-2. The plugin owns exactly one hidden runner named `Stream GFN Runner`.
-3. Its executable and start directory resolve inside the installed `stream-gfn/` directory.
-4. Both stored launch-option fields are empty; the launch receives only `1903340` as the per-call argument.
-5. Gamescope gives GFN foreground input without Desktop Mode fallback.
-6. A named built-in controller action responds.
-7. Steam's overlay opens and closes over GFN.
-8. Steam's **Exit Game** action ends the runner and owned GFN process.
+1. Steam does not remain on the hidden runner shortcut page; the one automatic runner-page navigation is returned to the Expedition 33 page.
+2. GFN reaches title-identifying Expedition 33 allocation or queue without another Play action.
+3. The plugin owns exactly one hidden runner named `Stream GFN Runner`.
+4. Its executable and start directory resolve inside the installed `stream-gfn/` directory.
+5. Both stored launch-option fields are empty; the launch receives only `1903340` as the per-call argument.
+6. Gamescope gives GFN foreground input without Desktop Mode fallback.
+7. A named built-in controller action responds.
+8. Steam's overlay opens and closes over GFN.
+9. Steam's **Exit Game** action ends the runner and owned GFN process.
 
 After Exit Game, poll every 500 ms for up to 10 seconds. Pass only after two consecutive polls where Steam reports the runner exactly `ReadyToLaunch` and the process check returns no matches. Missing, unrecognized, failed, timed-out, `Launching`, `Running`, or `Terminating` state is not ready.
 

@@ -49,6 +49,7 @@ export interface LaunchPresentation {
 export interface RunnerServicePort {
   readonly activity: RunnerActivity;
   subscribeStatus(listener: (activity: RunnerActivity) => void): () => void;
+  consumeRunnerRedirect(appId: unknown): boolean;
   prepare(): Promise<PrepareRunnerResult>;
   launch(): Promise<ServiceLaunchResult>;
   cleanup(): Promise<CleanupRunnerResult>;
@@ -172,6 +173,10 @@ export class GfnLaunchController {
 
   get canPatchLibrary(): boolean {
     return this.capability.available && this.service !== null;
+  }
+
+  consumeRunnerRedirect(appId: unknown): boolean {
+    return this.service?.consumeRunnerRedirect(appId) ?? false;
   }
 
   subscribe(listener: () => void): () => void {

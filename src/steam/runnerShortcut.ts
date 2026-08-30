@@ -411,6 +411,7 @@ export type ServiceLaunchResult =
 export class RunnerService {
   private readonly state: RunnerStateTracker;
   private prepared: PreparedRunner | null = null;
+  private pendingRunnerRedirect: { shortcutId: string; expiresAt: number } | null = null;
   private disposed = false;
   private lifecycleGeneration = 0;
 
@@ -428,6 +429,18 @@ export class RunnerService {
 
   subscribeStatus(listener: (activity: RunnerActivity) => void): () => void {
     return this.state.subscribe(listener);
+  }
+
+  consumeRunnerRedirect(appId: unknown): boolean {
+    const pending = this.pendingRunnerRedirect;
+    if (pending === null) return false;
+    if (Date.now() > pending.expiresAt) {
+      this.pendingRunnerRedirect = null;
+      return false;
+    }
+    if (!Number.isInteger(appId) || String(appId) !== pending.shortcutId) return false;
+    this.pendingRunnerRedirect = null;
+    return true;
   }
 
   async prepare(): Promise<PrepareRunnerResult> {
@@ -498,11 +511,19 @@ export class RunnerService {
         activity: "unknown",
       };
     }
+    const pendingRedirect = {
+      shortcutId: runner.runnerShortcutId,
+      expiresAt: Date.now() + Math.max(this.notificationTimeoutMs, 5_000),
+    };
+    this.pendingRunnerRedirect = pendingRedirect;
     const launched = await this.state.launch(
       runner,
       EXPEDITION_33_APP_ID,
       this.notificationTimeoutMs,
     );
+    if (!launched.accepted && this.pendingRunnerRedirect === pendingRedirect) {
+      this.pendingRunnerRedirect = null;
+    }
     if (!this.isCurrent(generation)) return this.disposedLaunchFailure();
     return { ok: true, ...launched };
   }
@@ -528,6 +549,7 @@ export class RunnerService {
     this.disposed = true;
     this.lifecycleGeneration += 1;
     this.prepared = null;
+    this.pendingRunnerRedirect = null;
     this.state.detach();
   }
 

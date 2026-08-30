@@ -46,6 +46,7 @@ class PanelService implements RunnerServicePort {
     activity: "active",
   }));
   cleanup = vi.fn(async () => this.cleanupResult);
+  consumeRunnerRedirect = vi.fn(() => false);
   dispose = vi.fn();
   subscribeStatus(listener: (activity: RunnerActivity) => void): () => void {
     listener(this.activity);

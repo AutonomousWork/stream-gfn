@@ -6,6 +6,7 @@ vi.mock("@decky/api", () => ({
 
 vi.mock("@decky/ui", () => ({
   DialogButton: () => null,
+  Navigation: { NavigateBack: vi.fn() },
   afterPatch: vi.fn(),
   appDetailsClasses: { InnerContainer: "SteamInnerContainer" },
   createReactTreePatcher: vi.fn(),
@@ -100,9 +101,11 @@ describe("Expedition 33 library action patch", () => {
       createReactTreePatcher: vi.fn(),
       innerContainerClass: "SteamInnerContainer",
       createAction: vi.fn(() => action),
+      navigateBack: vi.fn(),
     };
     const controller: LibraryPatchController = {
       canPatchLibrary: true,
+      consumeRunnerRedirect: vi.fn(() => false),
       reportLibraryCompatibility: vi.fn(),
     };
 
@@ -117,6 +120,61 @@ describe("Expedition 33 library action patch", () => {
       "/library/app/:appid",
       registeredPatch,
     );
+  });
+
+  it("navigates back exactly once when Steam opens the launched runner page", () => {
+    let routePatch: ((tree: unknown) => unknown) | undefined;
+    let renderPatch:
+      | ((args: unknown[], renderedTree: unknown) => unknown)
+      | undefined;
+    const routeProps = { renderFunc: vi.fn() };
+    const navigateBack = vi.fn();
+    const dependencies = {
+      route: {
+        addPatch: vi.fn((_path, patch) => {
+          routePatch = patch;
+          return patch;
+        }),
+        removePatch: vi.fn(),
+      },
+      findInReactTree: vi
+        .fn()
+        .mockReturnValueOnce(routeProps)
+        .mockImplementation((tree: unknown) => tree),
+      afterPatch: vi.fn(),
+      createReactTreePatcher: vi.fn((steps, handler) => {
+        renderPatch = (_args, renderedTree) => {
+          for (const step of steps) step(renderedTree);
+          return handler([], renderedTree);
+        };
+        return renderPatch;
+      }),
+      innerContainerClass: "SteamInnerContainer",
+      createAction: vi.fn(() => action),
+      navigateBack,
+    };
+    const consumeRunnerRedirect = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+    const controller = {
+      canPatchLibrary: true,
+      reportLibraryCompatibility: vi.fn(),
+      consumeRunnerRedirect,
+    };
+    const runnerPage = {
+      props: {
+        children: {
+          props: { overview: { appid: 424242 } },
+        },
+      },
+    };
+
+    installLibraryAppPatch(controller, dependencies);
+    routePatch?.({ props: routeProps });
+    renderPatch?.([], runnerPage);
+    renderPatch?.([], runnerPage);
+
+    expect(consumeRunnerRedirect).toHaveBeenCalledTimes(2);
+    expect(consumeRunnerRedirect).toHaveBeenNthCalledWith(1, 424242);
+    expect(navigateBack).toHaveBeenCalledTimes(1);
   });
 
   it("registers a dormant patch but leaves the page untouched while runtime is incompatible", () => {
@@ -134,9 +192,11 @@ describe("Expedition 33 library action patch", () => {
       createReactTreePatcher: vi.fn(),
       innerContainerClass: "SteamInnerContainer",
       createAction: vi.fn(() => action),
+      navigateBack: vi.fn(),
     };
     const controller: LibraryPatchController = {
       canPatchLibrary: false,
+      consumeRunnerRedirect: vi.fn(() => false),
       reportLibraryCompatibility: vi.fn(),
     };
 
@@ -165,9 +225,11 @@ describe("Expedition 33 library action patch", () => {
       createReactTreePatcher: vi.fn(),
       innerContainerClass: "SteamInnerContainer",
       createAction: vi.fn(() => action),
+      navigateBack: vi.fn(),
     };
     const controller: LibraryPatchController = {
       canPatchLibrary: true,
+      consumeRunnerRedirect: vi.fn(() => false),
       reportLibraryCompatibility: vi.fn(),
     };
     const tree = { props: { children: "native" } };

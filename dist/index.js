@@ -174,6 +174,9 @@ class GfnLaunchController {
     get canPatchLibrary() {
         return this.capability.available && this.service !== null;
     }
+    consumeRunnerRedirect(appId) {
+        return this.service?.consumeRunnerRedirect(appId) ?? false;
+    }
     subscribe(listener) {
         this.listeners.add(listener);
         listener();
@@ -1288,6 +1291,7 @@ class RunnerService {
         this.steam = steam;
         this.notificationTimeoutMs = notificationTimeoutMs;
         this.prepared = null;
+        this.pendingRunnerRedirect = null;
         this.disposed = false;
         this.lifecycleGeneration = 0;
         this.state = new RunnerStateTracker(steam);
@@ -1297,6 +1301,19 @@ class RunnerService {
     }
     subscribeStatus(listener) {
         return this.state.subscribe(listener);
+    }
+    consumeRunnerRedirect(appId) {
+        const pending = this.pendingRunnerRedirect;
+        if (pending === null)
+            return false;
+        if (Date.now() > pending.expiresAt) {
+            this.pendingRunnerRedirect = null;
+            return false;
+        }
+        if (!Number.isInteger(appId) || String(appId) !== pending.shortcutId)
+            return false;
+        this.pendingRunnerRedirect = null;
+        return true;
     }
     async prepare() {
         if (this.disposed)
@@ -1366,7 +1383,15 @@ class RunnerService {
                 activity: "unknown",
             };
         }
+        const pendingRedirect = {
+            shortcutId: runner.runnerShortcutId,
+            expiresAt: Date.now() + Math.max(this.notificationTimeoutMs, 5000),
+        };
+        this.pendingRunnerRedirect = pendingRedirect;
         const launched = await this.state.launch(runner, EXPEDITION_33_APP_ID, this.notificationTimeoutMs);
+        if (!launched.accepted && this.pendingRunnerRedirect === pendingRedirect) {
+            this.pendingRunnerRedirect = null;
+        }
         if (!this.isCurrent(generation))
             return this.disposedLaunchFailure();
         return { ok: true, ...launched };
@@ -1392,6 +1417,7 @@ class RunnerService {
         this.disposed = true;
         this.lifecycleGeneration += 1;
         this.prepared = null;
+        this.pendingRunnerRedirect = null;
         this.state.detach();
     }
     isCurrent(generation) {
@@ -1501,6 +1527,7 @@ const defaultDependencies = (controller) => ({
         const markerProps = { [LIBRARY_ACTION_MARKER]: true };
         return SP_JSX.jsx(GfnLaunchButton, { ...markerProps, controller: controller });
     },
+    navigateBack: () => DFL.Navigation.NavigateBack(),
 });
 const installLibraryAppPatch = (controller, injectedDependencies) => {
     const dependencies = defaultDependencies(controller);
@@ -1550,6 +1577,10 @@ const installLibraryAppPatch = (controller, injectedDependencies) => {
                     return children ?? null;
                 },
             ], (_args, renderedTree) => {
+                if (controller.consumeRunnerRedirect(appId)) {
+                    dependencies.navigateBack();
+                    return renderedTree;
+                }
                 const result = injectLibraryAction(renderedTree, appId, dependencies.createAction(controller), dependencies.innerContainerClass);
                 if (result === "missing-action-area") {
                     controller.reportLibraryCompatibility({

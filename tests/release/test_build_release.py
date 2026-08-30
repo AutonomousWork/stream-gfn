@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TAG = "v0.1.0-alpha.4"
+TAG = "v0.1.0-alpha.5"
 COMMIT = "a" * 40
 ARCHIVE_NAME = f"stream-gfn-{TAG}.zip"
 

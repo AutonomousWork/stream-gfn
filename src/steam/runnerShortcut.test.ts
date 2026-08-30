@@ -395,6 +395,29 @@ describe("verified cleanup", () => {
 });
 
 describe("runtime service", () => {
+  it("arms exactly one runner-page redirect before handing the launch to Steam", async () => {
+    vi.useFakeTimers();
+    const backend = new FakeBackend();
+    const steam = new FakeSteam();
+    backend.savedId = "42";
+    steam.shortcuts = [exactRunner()];
+    const service = new RunnerService(backend, steam, 10);
+    let consumedDuringRun = false;
+    steam.runGame = vi.fn(() => {
+      expect(service.consumeRunnerRedirect(1903340)).toBe(false);
+      consumedDuringRun = service.consumeRunnerRedirect(42);
+    });
+
+    const launch = service.launch();
+    await vi.advanceTimersByTimeAsync(10);
+    await launch;
+
+    expect(consumedDuringRun).toBe(true);
+    expect(service.consumeRunnerRedirect(42)).toBe(false);
+    expect(service.consumeRunnerRedirect(1903340)).toBe(false);
+    vi.useRealTimers();
+  });
+
   it("reconciles the exact hidden fingerprint before every launch", async () => {
     const backend = new FakeBackend();
     const steam = new FakeSteam();

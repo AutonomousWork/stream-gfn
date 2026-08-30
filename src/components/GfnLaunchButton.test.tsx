@@ -39,6 +39,7 @@ class FakeRunnerService implements RunnerServicePort {
   prepare = vi.fn(async () => this.prepareResult);
   launch = vi.fn(async () => this.launchResult);
   cleanup = vi.fn(async () => this.cleanupResult);
+  consumeRunnerRedirect = vi.fn(() => false);
   dispose = vi.fn();
   private listeners = new Set<(activity: RunnerActivity) => void>();
 
