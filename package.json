@@ -7,13 +7,13 @@
     "build": "rollup -c",
     "watch": "rollup -c -w",
     "typecheck": "tsc --noEmit",
-    "frontend-test": "node --test tests/frontend/*.test.mjs",
+    "frontend-test": "vitest run",
     "backend-test": "python3 -m unittest discover -s tests/backend -p 'test_*.py'",
     "test": "pnpm run frontend-test && pnpm run backend-test",
     "verify": "pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "engines": {
-    "node": ">=16.14",
+    "node": ">=18",
     "pnpm": ">=9"
   },
   "keywords": [
@@ -36,14 +36,7 @@
     "@types/react-dom": "19.1.1",
     "@types/webpack": "^5.28.5",
     "rollup": "^4.53.3",
-    "typescript": "^5.6.2"
-  },
-  "pnpm": {
-    "peerDependencyRules": {
-      "ignoreMissing": [
-        "react",
-        "react-dom"
-      ]
-    }
+    "typescript": "^5.6.2",
+    "vitest": "^3.2.4"
   }
 }

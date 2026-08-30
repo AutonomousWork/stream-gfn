@@ -1,0 +1,10 @@
+packages:
+  - "."
+
+allowBuilds:
+  esbuild: true
+
+peerDependencyRules:
+  ignoreMissing:
+    - react
+    - react-dom
