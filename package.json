@@ -1,0 +1,49 @@
+{
+  "name": "stream-gfn",
+  "version": "0.1.0",
+  "description": "Launch supported Steam titles through GeForce NOW from Gaming Mode.",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w",
+    "typecheck": "tsc --noEmit",
+    "frontend-test": "node --test tests/frontend/*.test.mjs",
+    "backend-test": "python3 -m unittest discover -s tests/backend -p 'test_*.py'",
+    "test": "pnpm run frontend-test && pnpm run backend-test",
+    "verify": "pnpm run typecheck && pnpm run test && pnpm run build"
+  },
+  "engines": {
+    "node": ">=16.14",
+    "pnpm": ">=9"
+  },
+  "keywords": [
+    "decky",
+    "geforce-now",
+    "steam-deck",
+    "steamos"
+  ],
+  "license": "BSD-3-Clause",
+  "dependencies": {
+    "@decky/api": "^1.1.3",
+    "react-icons": "^5.3.0",
+    "tslib": "^2.7.0"
+  },
+  "devDependencies": {
+    "@decky/rollup": "^1.0.2",
+    "@decky/ui": "^4.11.0",
+    "@rollup/rollup-linux-x64-musl": "^4.53.3",
+    "@types/react": "19.1.1",
+    "@types/react-dom": "19.1.1",
+    "@types/webpack": "^5.28.5",
+    "rollup": "^4.53.3",
+    "typescript": "^5.6.2"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "react",
+        "react-dom"
+      ]
+    }
+  }
+}

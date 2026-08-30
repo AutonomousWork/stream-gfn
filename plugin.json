@@ -1,0 +1,10 @@
+{
+  "name": "Stream GFN",
+  "author": "Maximus",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": ["geforce-now", "streaming"],
+    "description": "Launch supported Steam titles through GeForce NOW from Gaming Mode."
+  }
+}
