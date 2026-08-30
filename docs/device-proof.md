@@ -2,9 +2,17 @@
 
 This checklist validates the exact GitHub prerelease after it is published. It does not block implementation or prerelease publication. It blocks stable promotion and support for additional titles.
 
-## 1. Download the released artifact
+## 1. Install the released artifact
 
-Open the GitHub release page in the Legion Go S browser. Download both assets:
+Open Decky Settings on the Legion Go S, choose **Install Plugin from URL**, and paste the exact packaged-asset URL:
+
+```text
+https://github.com/AutonomousWork/stream-gfn/releases/download/v0.1.0-alpha.1/stream-gfn-v0.1.0-alpha.1.zip
+```
+
+Do not choose GitHub's generated **Source code (zip)**. It is not the Decky package. After installation, reload Decky if prompted. The plugin panel must report tag `v0.1.0-alpha.1` and the same commit as the release.
+
+For independent checksum evidence or when Install Plugin from URL is unavailable, use the Desktop Mode fallback. Open the GitHub release page in the browser and download both named assets:
 
 - `stream-gfn-v0.1.0-alpha.1.zip`
 - `stream-gfn-v0.1.0-alpha.1.zip.sha256`
@@ -15,9 +23,9 @@ Record the release URL, tag, target commit, date, and operator. Verify the check
 sha256sum -c stream-gfn-v0.1.0-alpha.1.zip.sha256
 ```
 
-The result must be `OK`. Extract the archive and confirm it contains one top-level `stream-gfn/` directory. Copy that directory to Decky's plugins directory using the installation method appropriate for the device, then restart or reload Decky. The plugin panel must report tag `v0.1.0-alpha.1` and the same commit as the release.
+The result must be `OK`. Extract the archive and confirm it contains one top-level `stream-gfn/` directory. Install that directory at `~/homebrew/plugins/stream-gfn`, then restart or reload Decky and confirm the packaged identity again.
 
-Browser download is only transport; it does not automatically install the Decky plugin.
+Browser download by itself is only transport. Decky's Install Plugin from URL flow is the primary installation path; manual extraction is the fallback.
 
 ## 2. Record the target tuple
 
@@ -75,7 +83,7 @@ Repeat the complete launch and exit cycle once. The same runner identity must be
 
 - Invoke the packaged runner with an unsupported AppID. It must exit non-zero before starting GFN.
 - Reload the plugin during an active session. It must rehydrate Active or Unknown and must not launch again or create a duplicate.
-- Use the plugin's explicit `Remove hidden runner` action only after the runner is verified inactive. It must reverify the complete fingerprint, remove that one shortcut, wait for absence, and then clear saved state.
+- Use the plugin's explicit **Cleanup Runner** action only after the runner is verified inactive. It must reverify the complete fingerprint, remove that one shortcut, wait for absence, and then clear saved state.
 - If any ownership field is missing or different, leave the shortcut untouched and record the mismatch.
 
 Plugin unload or ordinary upgrade must remove frontend patches and listeners but must not silently delete the reusable runner.

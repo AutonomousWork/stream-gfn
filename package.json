@@ -1,16 +1,19 @@
 {
   "name": "stream-gfn",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "Launch supported Steam titles through GeForce NOW from Gaming Mode.",
   "type": "module",
   "scripts": {
-    "build": "rollup -c",
+    "build": "rollup -c --forceExit",
     "watch": "rollup -c -w",
     "typecheck": "tsc --noEmit",
     "frontend-test": "vitest run",
     "backend-test": "python3 -m unittest discover -s tests/backend -p 'test_*.py'",
+    "release-test": "python3 -m unittest discover -s tests/release -p 'test_*.py'",
+    "bundle:release": "python3 scripts/build_release.py --tag v0.1.0-alpha.1 --allow-dirty",
+    "bundle:publication": "python3 scripts/build_release.py --tag v0.1.0-alpha.1 --publication",
     "test": "pnpm run frontend-test && pnpm run backend-test",
-    "verify": "pnpm run typecheck && pnpm run test && pnpm run build"
+    "verify": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run release-test && pnpm run bundle:release"
   },
   "engines": {
     "node": ">=18",
