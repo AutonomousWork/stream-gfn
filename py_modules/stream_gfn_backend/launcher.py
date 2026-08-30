@@ -5,7 +5,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, TextIO, TypedDict
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, TextIO, TypedDict
 
 
 FLATPAK_PATH = "/usr/bin/flatpak"
@@ -48,6 +48,20 @@ def _launch_argv() -> List[str]:
         GFN_FLATPAK_APP_ID,
         f"--url-route={EXPEDITION_33_ROUTE}",
     ]
+
+
+def _host_program_environment(
+    source: Optional[Mapping[str, str]] = None,
+) -> Dict[str, str]:
+    """Restore the host library path before running a system executable."""
+
+    environment = dict(os.environ if source is None else source)
+    original_library_path = environment.get("LD_LIBRARY_PATH_ORIG")
+    if original_library_path is None:
+        environment.pop("LD_LIBRARY_PATH", None)
+    else:
+        environment["LD_LIBRARY_PATH"] = original_library_path
+    return environment
 
 
 def resolve_plugin_paths(plugin_root: Path) -> PluginPaths:
@@ -127,6 +141,7 @@ def gfn_preflight(
             shell=False,
             text=True,
             timeout=PREFLIGHT_TIMEOUT_SECONDS,
+            env=_host_program_environment(),
         )
     except subprocess.TimeoutExpired:
         return _preflight_result(

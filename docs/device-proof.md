@@ -7,20 +7,20 @@ This checklist validates the exact GitHub prerelease after it is published. It d
 Open Decky Settings on the Legion Go S, choose **Install Plugin from URL**, and paste the exact packaged-asset URL:
 
 ```text
-https://github.com/AutonomousWork/stream-gfn/releases/download/v0.1.0-alpha.2/stream-gfn-v0.1.0-alpha.2.zip
+https://github.com/AutonomousWork/stream-gfn/releases/download/v0.1.0-alpha.3/stream-gfn-v0.1.0-alpha.3.zip
 ```
 
-Do not choose GitHub's generated **Source code (zip)**. It is not the Decky package. After installation, reload Decky if prompted. The plugin panel must report tag `v0.1.0-alpha.2` and the same commit as the release.
+Do not choose GitHub's generated **Source code (zip)**. It is not the Decky package. After installation, reload Decky if prompted. The plugin panel must report tag `v0.1.0-alpha.3` and the same commit as the release.
 
 For independent checksum evidence or when Install Plugin from URL is unavailable, use the Desktop Mode fallback. Open the GitHub release page in the browser and download both named assets:
 
-- `stream-gfn-v0.1.0-alpha.2.zip`
-- `stream-gfn-v0.1.0-alpha.2.zip.sha256`
+- `stream-gfn-v0.1.0-alpha.3.zip`
+- `stream-gfn-v0.1.0-alpha.3.zip.sha256`
 
 Record the release URL, tag, target commit, date, and operator. Verify the checksum before installation:
 
 ```sh
-sha256sum -c stream-gfn-v0.1.0-alpha.2.zip.sha256
+sha256sum -c stream-gfn-v0.1.0-alpha.3.zip.sha256
 ```
 
 The result must be `OK`. Extract the archive and confirm it contains one top-level `stream-gfn/` directory. Install that directory at `~/homebrew/plugins/stream-gfn`, then restart or reload Decky and confirm the packaged identity again.

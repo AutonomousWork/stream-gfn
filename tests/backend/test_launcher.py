@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock, patch
 
 from py_modules.stream_gfn_backend import launcher
 
@@ -244,6 +244,48 @@ class GfnPreflightTest(unittest.TestCase):
 
         self.assertEqual(self.preflight()["code"], "malformed_response")
 
+    def test_restores_host_library_path_for_decky_flatpak_subprocess(self) -> None:
+        self.run.return_value = subprocess.CompletedProcess(
+            [],
+            0,
+            "ID: com.nvidia.geforcenow\n",
+            "",
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "LD_LIBRARY_PATH": "/tmp/_MEI-decky",
+                "LD_LIBRARY_PATH_ORIG": "/usr/lib",
+                "USER": "deck",
+            },
+            clear=True,
+        ):
+            self.preflight()
+
+        environment = self.run.call_args.kwargs["env"]
+        self.assertEqual(environment["LD_LIBRARY_PATH"], "/usr/lib")
+        self.assertEqual(environment["USER"], "deck")
+
+    def test_removes_bundled_library_path_when_host_had_no_original(self) -> None:
+        self.run.return_value = subprocess.CompletedProcess(
+            [],
+            0,
+            "ID: com.nvidia.geforcenow\n",
+            "",
+        )
+
+        with patch.dict(
+            os.environ,
+            {"LD_LIBRARY_PATH": "/tmp/_MEI-decky", "USER": "deck"},
+            clear=True,
+        ):
+            self.preflight()
+
+        environment = self.run.call_args.kwargs["env"]
+        self.assertNotIn("LD_LIBRARY_PATH", environment)
+        self.assertEqual(environment["USER"], "deck")
+
     def test_success_uses_fixed_no_shell_command(self) -> None:
         self.run.return_value = subprocess.CompletedProcess(
             [],
@@ -271,6 +313,7 @@ class GfnPreflightTest(unittest.TestCase):
             shell=False,
             text=True,
             timeout=5.0,
+            env=ANY,
         )
 
 
